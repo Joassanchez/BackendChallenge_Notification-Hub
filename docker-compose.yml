@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: notification_hub_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: notification_password
+      POSTGRES_DB: notification_hub_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - notification_hub_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notification_user -d notification_hub_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  notification_hub_postgres_data:

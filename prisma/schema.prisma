@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MessageStatus {
+  pending
+  success
+  partial
+  failed
+  cancelled
+}
+
+enum DeliveryStatus {
+  pending
+  processing
+  success
+  failed
+  retrying
+  cancelled
+}
+
+enum AttemptStatus {
+  success
+  failed
+  timeout
+  provider_error
+}
+
+enum ProviderCode {
+  telegram
+  discord
+  slack
+  teams
+}
+
+enum RoleCode {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  username     String    @unique @db.VarChar(50)
+  email        String?   @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  roles      UserRole[]
+  messages   Message[]
+  dailyUsage DailyUsage[]
+  auditLogs  AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      RoleCode @unique
+  name      String   @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId     String   @map("user_id") @db.Uuid
+  roleId     String   @map("role_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Provider {
+  id        String       @id @default(uuid()) @db.Uuid
+  code      ProviderCode @unique
+  name      String       @db.VarChar(100)
+  isActive  Boolean      @default(true) @map("is_active")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  connections ProviderConnection[]
+  targets     NotificationTarget[]
+  deliveries  MessageDelivery[]
+
+  @@map("providers")
+}
+
+model ProviderConnection {
+  id         String   @id @default(uuid()) @db.Uuid
+  providerId String   @map("provider_id") @db.Uuid
+  name       String   @db.VarChar(100)
+  authType   String   @map("auth_type") @db.VarChar(50)
+  secretRef  String?  @map("secret_ref") @db.VarChar(255)
+  config     Json?
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  provider Provider             @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  targets  NotificationTarget[]
+
+  @@map("provider_connections")
+}
+
+model NotificationTarget {
+  id                   String   @id @default(uuid()) @db.Uuid
+  providerId           String   @map("provider_id") @db.Uuid
+  providerConnectionId String   @map("provider_connection_id") @db.Uuid
+  externalTargetId     String   @map("external_target_id") @db.VarChar(255)
+  targetType           String   @map("target_type") @db.VarChar(50)
+  displayName          String?  @map("display_name") @db.VarChar(150)
+  metadata             Json?
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  provider           Provider           @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  providerConnection ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Restrict)
+  deliveries         MessageDelivery[]
+
+  @@index([providerId])
+  @@map("notification_targets")
+}
+
+model Message {
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  content        String
+  status         MessageStatus @default(pending)
+  idempotencyKey String?       @map("idempotency_key") @db.VarChar(255)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deliveries MessageDelivery[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("messages")
+}
+
+model MessageDelivery {
+  id           String         @id @default(uuid()) @db.Uuid
+  messageId    String         @map("message_id") @db.Uuid
+  providerId   String         @map("provider_id") @db.Uuid
+  targetId     String         @map("target_id") @db.Uuid
+  status       DeliveryStatus @default(pending)
+  attemptCount Int            @default(0) @map("attempt_count")
+  nextRetryAt  DateTime?      @map("next_retry_at")
+  sentAt       DateTime?      @map("sent_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  message  Message            @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  provider Provider           @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  target   NotificationTarget @relation(fields: [targetId], references: [id], onDelete: Restrict)
+  attempts DeliveryAttempt[]
+
+  @@index([messageId])
+  @@index([providerId, status])
+  @@index([status, nextRetryAt])
+  @@map("message_deliveries")
+}
+
+model DeliveryAttempt {
+  id                String        @id @default(uuid()) @db.Uuid
+  deliveryId        String        @map("delivery_id") @db.Uuid
+  attemptNumber     Int           @map("attempt_number")
+  status            AttemptStatus
+  httpStatusCode    Int?          @map("http_status_code")
+  providerMessageId String?       @map("provider_message_id") @db.VarChar(255)
+  providerResponse  Json?         @map("provider_response")
+  errorCode         String?       @map("error_code") @db.VarChar(100)
+  errorMessage      String?       @map("error_message")
+  attemptedAt       DateTime      @default(now()) @map("attempted_at")
+
+  delivery MessageDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+  @@map("delivery_attempts")
+}
+
+model DailyUsage {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  usageDate  DateTime @map("usage_date") @db.Date
+  sentCount  Int      @default(0) @map("sent_count")
+  dailyLimit Int      @default(100) @map("daily_limit")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, usageDate])
+  @@map("daily_usage")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String?  @map("entity_type") @db.VarChar(100)
+  entityId   String?  @map("entity_id") @db.Uuid
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
