@@ -1,5 +1,6 @@
 ﻿import { MessageStatus, Prisma, ProviderCode } from "../../generated/prisma/client.js";
 import { badRequest, conflict, notFound } from "../../shared/http/errors.js";
+import type { DeliveryExecutionService } from "../delivery-execution/delivery-execution.service.js";
 import type { MessageRepository, MessageWithDeliveries, NormalizedDestination, MessageListFilters } from "./message-repository.js";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -35,7 +36,10 @@ export type MessageDto = {
 };
 
 export class MessageService {
-  constructor(private readonly messages: MessageRepository) {}
+  constructor(
+    private readonly messages: MessageRepository,
+    private readonly deliveryExecution?: DeliveryExecutionService,
+  ) {}
 
   async create(input: CreateMessageInput): Promise<{ message: MessageDto; created: boolean }> {
     const content = readContent(input.content);
@@ -58,7 +62,15 @@ export class MessageService {
         ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
       });
 
-      return { message: toMessageDto(message), created: true };
+      if (this.deliveryExecution === undefined) {
+        return { message: toMessageDto(message), created: true };
+      }
+
+      await this.deliveryExecution.executeMessage(message.id);
+
+      const executedMessage = await this.messages.findById(message.id);
+
+      return { message: toMessageDto(executedMessage ?? message), created: true };
     } catch (error) {
       if (idempotencyKey !== undefined && isUniqueConstraintError(error)) {
         const existing = await this.messages.findByIdempotencyKey(input.userId, idempotencyKey);

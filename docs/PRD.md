@@ -952,6 +952,153 @@ Reintentos automáticos.
 Auditoría más completa.
 Idempotencia completa.
 
+## 19_B. Plan de implementación actualizado
+
+El desarrollo del proyecto se organiza en módulos funcionales. Si bien el PRD original planteaba fases generales, durante la implementación se adoptó una división modular para reducir riesgo técnico, facilitar validación incremental y mantener trazabilidad entre especificación, diseño, tareas, implementación y verificación.
+
+### Módulo 1 - Base de datos y configuración inicial
+
+Estado: completado.
+
+Alcance:
+- Configuración de Docker Compose con PostgreSQL.
+- Configuración de Prisma.
+- Definición del modelo de datos inicial.
+- Migraciones.
+- Seed inicial.
+- Roles `USER` y `ADMIN`.
+- Usuario administrador inicial.
+- Providers iniciales `telegram` y `discord`.
+
+### Módulo 2 - Autenticación y roles
+
+Estado: completado.
+
+Alcance:
+- Registro de usuarios.
+- Login.
+- Hash de contraseñas.
+- Generación de JWT.
+- Middleware de autenticación.
+- Middleware de autorización por rol.
+- Endpoint `/me`.
+- Validación de acceso a rutas protegidas.
+
+### Módulo 3 - Message Management
+
+Estado: completado en modalidad persistence-first.
+
+Alcance:
+- `POST /messages`.
+- Validación de contenido.
+- Validación de destinos.
+- Creación de `Message`.
+- Creación de `MessageDelivery` en estado `pending`.
+- Idempotencia mediante `Idempotency-Key`.
+- `GET /messages`.
+- `GET /messages/:id`.
+- Filtros por estado, provider y fechas.
+- Scoping por usuario autenticado.
+
+Fuera de este módulo:
+- Ejecución real de providers.
+- Creación de `DeliveryAttempt`.
+- Cálculo final de estados `success`, `failed` y `partial`.
+
+### Módulo 4 - Providers y Notification Targets Foundation
+
+Estado: completado.
+
+Alcance:
+- `GET /providers`.
+- Lectura segura de provider connections para administradores.
+- `GET /notification-targets`.
+- `POST /notification-targets`.
+- `PATCH /notification-targets/:id`.
+- Activación y desactivación de targets.
+- Ownership de targets por usuario.
+- Resolución interna de provider connection activa.
+- Prevención de exposición de secretos.
+
+Fuera de este módulo:
+- Llamadas reales a Telegram o Discord.
+- Webhooks.
+- Delivery execution.
+- Delivery attempts.
+
+### Módulo 5 - Delivery Execution
+
+Estado: completado.
+
+Alcance previsto:
+- Definir una interfaz común de providers.
+- Implementar adapter de Telegram.
+- Implementar adapter de Discord.
+- Ejecutar entregas pendientes.
+- Crear registros en `DeliveryAttempt`.
+- Guardar respuesta exitosa o error de proveedor.
+- Actualizar `MessageDelivery.status`.
+- Calcular `Message.status` como `success`, `failed` o `partial`.
+
+### Módulo 6 - Rate Limiting
+
+Estado: pendiente.
+
+Alcance previsto:
+- Validar límite diario por usuario.
+- Usar `DailyUsage`.
+- Incrementar consumo diario.
+- Devolver error `429 Too Many Requests` si se supera el límite.
+- Calcular mensajes restantes del día.
+
+### Módulo 7 - Admin Reporting
+
+Estado: pendiente.
+
+Alcance previsto:
+- `GET /admin/messages`.
+- Filtros por usuario, estado, provider y fecha.
+- `GET /admin/metrics`.
+- Total de mensajes enviados por usuario.
+- Mensajes enviados durante el día actual.
+- Límite diario.
+- Mensajes restantes.
+
+### Módulo 8 - Testing Hardening
+
+Estado: parcial.
+
+Alcance previsto:
+- Mantener tests de integración existentes.
+- Agregar tests unitarios para lógica principal.
+- Mockear providers externos.
+- Cubrir cálculo de estados.
+- Cubrir rate limiting.
+- Cubrir endpoints administrativos.
+
+### Módulo 9 - Documentación y entrega
+
+Estado: pendiente.
+
+Alcance previsto:
+- Completar README.
+- Documentar variables de entorno.
+- Documentar comandos de instalación, migración, seed, ejecución y testing.
+- Agregar OpenAPI/Swagger.
+- Documentar endpoints principales.
+- Documentar decisiones técnicas relevantes.
+
+### Módulo 10 - Extras opcionales
+
+Estado: fuera de alcance inicial.
+
+Alcance posible:
+- Dockerfile de la API.
+- CI/CD.
+- Deploy.
+- Reintentos automáticos.
+- Auditoría avanzada.
+
 ## 20. Riesgos técnicos
 ### RT-01 - Complejidad de proveedores externos
 

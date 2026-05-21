@@ -3,6 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
+import type { DeliveryProviderRegistry } from "../src/modules/delivery-execution/delivery-provider-adapter.js";
 
 process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
@@ -16,7 +17,16 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
-const app = createApp();
+const successfulDeliveryAdapters = {
+  [ProviderCode.telegram]: {
+    send: async () => ({ kind: "success", httpStatusCode: 200, providerMessageId: "telegram_test_message" }),
+  },
+  [ProviderCode.discord]: {
+    send: async () => ({ kind: "success", httpStatusCode: 204, providerMessageId: "discord_test_message" }),
+  },
+} satisfies DeliveryProviderRegistry;
+
+const app = createApp({ deliveryAdapters: successfulDeliveryAdapters });
 
 async function ensureSeedData() {
   await prisma.role.upsert({
@@ -143,7 +153,7 @@ describe("Messages API", () => {
     await appPrisma.$disconnect();
   });
 
-  it("creates a pending message with one or multiple owned destinations without delivery attempts", async () => {
+  it("executes a new message with one or multiple owned destinations and records delivery attempts", async () => {
     const { user, token } = await createUserAndLogin();
     const telegramTarget = await createTarget({ userId: user.id, providerCode: ProviderCode.telegram });
     const discordTarget = await createTarget({ userId: user.id, providerCode: ProviderCode.discord });
@@ -156,12 +166,12 @@ describe("Messages API", () => {
       ],
     }).expect(201);
 
-    expect(response.body).toMatchObject({ content: "Hello team", status: "pending" });
+    expect(response.body).toMatchObject({ content: "Hello team", status: "success" });
     expect(response.body.messageId).toEqual(expect.any(String));
     expect(response.body.deliveries).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ provider: "telegram", targetId: telegramTarget.id, status: "pending" }),
-        expect.objectContaining({ provider: "discord", targetId: discordTarget.id, status: "pending" }),
+        expect.objectContaining({ provider: "telegram", targetId: telegramTarget.id, status: "success" }),
+        expect.objectContaining({ provider: "discord", targetId: discordTarget.id, status: "success" }),
       ]),
     );
 
@@ -172,7 +182,7 @@ describe("Messages API", () => {
         },
       },
     });
-    expect(attempts).toBe(0);
+    expect(attempts).toBe(2);
   });
 
   it("rejects invalid create requests and does not persist partial messages", async () => {
@@ -275,7 +285,7 @@ describe("Messages API", () => {
       destinations: [{ provider: "telegram", targetId: otherTarget.id }],
     }).expect(201);
 
-    const list = await request(app).get("/messages?provider=telegram&status=pending").set("Authorization", `Bearer ${token}`).expect(200);
+    const list = await request(app).get("/messages?provider=telegram&status=success").set("Authorization", `Bearer ${token}`).expect(200);
     expect(list.body.messages.map((message: { messageId: string }) => message.messageId)).toContain(telegram.body.messageId);
     expect(list.body.messages.map((message: { messageId: string }) => message.messageId)).not.toContain(discord.body.messageId);
     expect(list.body.messages.map((message: { messageId: string }) => message.messageId)).not.toContain(foreign.body.messageId);

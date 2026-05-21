@@ -60,6 +60,15 @@ export class MessageRepository {
     });
   }
 
+  findById(messageId: string) {
+    return this.db.message.findUnique({
+      where: {
+        id: messageId,
+      },
+      include: messageWithDeliveries,
+    });
+  }
+
   listForUser(userId: string, filters: MessageListFilters) {
     return this.db.message.findMany({
       where: {

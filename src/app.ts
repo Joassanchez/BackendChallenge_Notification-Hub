@@ -4,6 +4,11 @@ import { AuthService } from "./modules/auth/auth.service.js";
 import { createAuthenticateMiddleware } from "./modules/auth/authenticate.middleware.js";
 import { PasswordService } from "./modules/auth/password.service.js";
 import { TokenService } from "./modules/auth/token.service.js";
+import { DeliveryConfigResolver } from "./modules/delivery-execution/delivery-config-resolver.js";
+import { DeliveryExecutionRepository } from "./modules/delivery-execution/delivery-execution.repository.js";
+import { DeliveryExecutionService } from "./modules/delivery-execution/delivery-execution.service.js";
+import type { DeliveryProviderRegistry } from "./modules/delivery-execution/delivery-provider-adapter.js";
+import { createProductionDeliveryProviderRegistry } from "./modules/delivery-execution/provider-adapters.js";
 import { MessageRepository } from "./modules/messages/message-repository.js";
 import { createMessageRouter } from "./modules/messages/message.routes.js";
 import { MessageService } from "./modules/messages/message.service.js";
@@ -18,14 +23,23 @@ import { UserRepository } from "./modules/users/user-repository.js";
 import { prisma } from "./shared/database/prisma.js";
 import { errorMiddleware } from "./shared/http/error-middleware.js";
 
-export function createApp() {
+export type AppDependencies = {
+  deliveryAdapters?: DeliveryProviderRegistry;
+};
+
+export function createApp(dependencies: AppDependencies = {}) {
   const app = express();
 
   const userRepository = new UserRepository(prisma);
   const tokenService = new TokenService();
   const authService = new AuthService(userRepository, new PasswordService(), tokenService);
   const authenticate = createAuthenticateMiddleware(tokenService, userRepository);
-  const messageService = new MessageService(new MessageRepository(prisma));
+  const deliveryExecutionService = new DeliveryExecutionService(
+    new DeliveryExecutionRepository(prisma),
+    new DeliveryConfigResolver(),
+    dependencies.deliveryAdapters ?? createProductionDeliveryProviderRegistry(),
+  );
+  const messageService = new MessageService(new MessageRepository(prisma), deliveryExecutionService);
   const providerService = new ProviderService(new ProviderRepository(prisma));
   const notificationTargetService = new NotificationTargetService(new NotificationTargetRepository(prisma));
 
