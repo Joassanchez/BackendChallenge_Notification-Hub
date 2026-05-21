@@ -4,6 +4,9 @@ import { AuthService } from "./modules/auth/auth.service.js";
 import { createAuthenticateMiddleware } from "./modules/auth/authenticate.middleware.js";
 import { PasswordService } from "./modules/auth/password.service.js";
 import { TokenService } from "./modules/auth/token.service.js";
+import { MessageRepository } from "./modules/messages/message-repository.js";
+import { createMessageRouter } from "./modules/messages/message.routes.js";
+import { MessageService } from "./modules/messages/message.service.js";
 import { requireRole } from "./modules/roles/require-role.middleware.js";
 import { UserRepository } from "./modules/users/user-repository.js";
 import { prisma } from "./shared/database/prisma.js";
@@ -16,6 +19,7 @@ export function createApp() {
   const tokenService = new TokenService();
   const authService = new AuthService(userRepository, new PasswordService(), tokenService);
   const authenticate = createAuthenticateMiddleware(tokenService, userRepository);
+  const messageService = new MessageService(new MessageRepository(prisma));
 
   app.use(express.json());
 
@@ -24,6 +28,7 @@ export function createApp() {
   });
 
   app.use("/auth", createAuthRouter(authService));
+  app.use("/messages", authenticate, createMessageRouter(messageService));
 
   app.get("/me", authenticate, (request, response) => {
     response.status(200).json(request.auth);

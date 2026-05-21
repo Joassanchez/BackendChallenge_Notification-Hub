@@ -25,6 +25,10 @@ export function forbidden(message = "Insufficient permissions"): AppError {
   return new AppError(403, "FORBIDDEN", message);
 }
 
+export function notFound(message = "Resource not found"): AppError {
+  return new AppError(404, "NOT_FOUND", message);
+}
+
 export function conflict(message: string, details?: ErrorDetails): AppError {
   return new AppError(409, "CONFLICT", message, details);
 }

@@ -55,6 +55,7 @@ model User {
 
   roles      UserRole[]
   messages   Message[]
+  targets    NotificationTarget[]
   dailyUsage DailyUsage[]
   auditLogs  AuditLog[]
 
@@ -118,6 +119,7 @@ model ProviderConnection {
 
 model NotificationTarget {
   id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
   providerId           String   @map("provider_id") @db.Uuid
   providerConnectionId String   @map("provider_connection_id") @db.Uuid
   externalTargetId     String   @map("external_target_id") @db.VarChar(255)
@@ -128,10 +130,12 @@ model NotificationTarget {
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
+  user               User               @relation(fields: [userId], references: [id], onDelete: Restrict)
   provider           Provider           @relation(fields: [providerId], references: [id], onDelete: Restrict)
   providerConnection ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Restrict)
   deliveries         MessageDelivery[]
 
+  @@index([userId])
   @@index([providerId])
   @@map("notification_targets")
 }
