@@ -28,6 +28,8 @@ export type MessageListFilters = {
   to?: Date;
 };
 
+export type BeforeMessageCreateHook = (transaction: Prisma.TransactionClient) => Promise<void>;
+
 type TargetForDestination = {
   id: string;
   providerId: string;
@@ -106,6 +108,7 @@ export class MessageRepository {
     content: string;
     destinations: NormalizedDestination[];
     idempotencyKey?: string;
+    beforeCreate?: BeforeMessageCreateHook;
   }) {
     return this.db.$transaction(async (transaction) => {
       const targets = await transaction.notificationTarget.findMany({
@@ -133,6 +136,8 @@ export class MessageRepository {
           targetId: target.id,
         };
       });
+
+      await input.beforeCreate?.(transaction);
 
       return transaction.message.create({
         data: {

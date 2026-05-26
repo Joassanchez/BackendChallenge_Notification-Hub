@@ -33,6 +33,10 @@ export function conflict(message: string, details?: ErrorDetails): AppError {
   return new AppError(409, "CONFLICT", message, details);
 }
 
+export function tooManyRequests(message = "Daily message limit exceeded", details?: ErrorDetails): AppError {
+  return new AppError(429, "RATE_LIMIT_EXCEEDED", message, details);
+}
+
 export function unprocessable(message: string, details?: ErrorDetails): AppError {
   return new AppError(422, "VALIDATION_ERROR", message, details);
 }

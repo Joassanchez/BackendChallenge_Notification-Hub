@@ -1,6 +1,7 @@
 ﻿import { MessageStatus, Prisma, ProviderCode } from "../../generated/prisma/client.js";
 import { badRequest, conflict, notFound } from "../../shared/http/errors.js";
 import type { DeliveryExecutionService } from "../delivery-execution/delivery-execution.service.js";
+import type { RateLimitService } from "../rate-limiting/rate-limit.service.js";
 import type { MessageRepository, MessageWithDeliveries, NormalizedDestination, MessageListFilters } from "./message-repository.js";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -39,6 +40,7 @@ export class MessageService {
   constructor(
     private readonly messages: MessageRepository,
     private readonly deliveryExecution?: DeliveryExecutionService,
+    private readonly rateLimits?: RateLimitService,
   ) {}
 
   async create(input: CreateMessageInput): Promise<{ message: MessageDto; created: boolean }> {
@@ -55,11 +57,17 @@ export class MessageService {
     }
 
     try {
+      const rateLimits = this.rateLimits;
       const message = await this.messages.createPendingMessage({
         userId: input.userId,
         content,
         destinations,
         ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+        ...(rateLimits === undefined
+          ? {}
+          : {
+              beforeCreate: (transaction) => rateLimits.reserveMessage(transaction, input.userId),
+            }),
       });
 
       if (this.deliveryExecution === undefined) {

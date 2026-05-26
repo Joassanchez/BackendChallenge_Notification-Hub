@@ -31,4 +31,5 @@ export const env = {
   JWT_SECRET: requireEnv("JWT_SECRET"),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN?.trim() || "1d",
   PORT: optionalNumber("PORT", 3000),
+  DAILY_MESSAGE_LIMIT: optionalNumber("DAILY_MESSAGE_LIMIT", 100),
 } as const;
