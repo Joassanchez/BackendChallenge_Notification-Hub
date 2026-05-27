@@ -6,5 +6,12 @@ export default defineConfig({
     globals: false,
     pool: "forks",
     fileParallelism: false,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "lcov"],
+      reportsDirectory: "coverage",
+      include: ["src/**/*.ts"],
+      exclude: ["src/generated/**", "src/main.ts"],
+    },
   },
 });

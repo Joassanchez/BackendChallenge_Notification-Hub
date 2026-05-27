@@ -17,5 +17,30 @@ services:
       timeout: 5s
       retries: 5
 
+  test-coverage:
+    image: node:24-bookworm
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://notification_user:notification_password@postgres:5432/notification_hub_db?schema=public
+      PORT: "3000"
+      JWT_SECRET: docker_coverage_secret
+      JWT_EXPIRES_IN: 1d
+      DAILY_MESSAGE_LIMIT: "100"
+      TELEGRAM_BOT_TOKEN: ""
+      DISCORD_WEBHOOK_URL: ""
+    volumes:
+      - .:/app
+      - notification_hub_node_modules:/app/node_modules
+    command: >
+      sh -c "npm ci &&
+      npm run db:generate &&
+      npm run db:migrate:deploy &&
+      npm run db:seed &&
+      npm run test:coverage"
+
 volumes:
   notification_hub_postgres_data:
+  notification_hub_node_modules:
