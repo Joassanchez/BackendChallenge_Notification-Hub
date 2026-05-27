@@ -1,4 +1,7 @@
-﻿import express from "express";
+import express from "express";
+import { AdminReportingRepository } from "./modules/admin-reporting/admin-reporting.repository.js";
+import { createAdminReportingRouter } from "./modules/admin-reporting/admin-reporting.routes.js";
+import { AdminReportingService } from "./modules/admin-reporting/admin-reporting.service.js";
 import { createAuthRouter } from "./modules/auth/auth.routes.js";
 import { AuthService } from "./modules/auth/auth.service.js";
 import { createAuthenticateMiddleware } from "./modules/auth/authenticate.middleware.js";
@@ -23,6 +26,7 @@ import { createRateLimitRouter } from "./modules/rate-limiting/rate-limit.routes
 import { RateLimitService } from "./modules/rate-limiting/rate-limit.service.js";
 import { requireRole } from "./modules/roles/require-role.middleware.js";
 import { UserRepository } from "./modules/users/user-repository.js";
+import { env } from "./shared/config/env.js";
 import { prisma } from "./shared/database/prisma.js";
 import { errorMiddleware } from "./shared/http/error-middleware.js";
 
@@ -46,6 +50,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   const notificationTargetService = new NotificationTargetService(new NotificationTargetRepository(prisma));
   const rateLimitService = new RateLimitService(new RateLimitRepository(prisma));
   const messageService = new MessageService(new MessageRepository(prisma), deliveryExecutionService, rateLimitService);
+  const adminReportingService = new AdminReportingService(new AdminReportingRepository(prisma), env.DAILY_MESSAGE_LIMIT);
 
   app.use(express.json());
 
@@ -59,6 +64,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use("/notification-targets", authenticate, createNotificationTargetRouter(notificationTargetService));
   app.use("/messages", authenticate, createMessageRouter(messageService));
   app.use("/rate-limit", authenticate, createRateLimitRouter(rateLimitService));
+  app.use("/admin", authenticate, requireRole("ADMIN"), createAdminReportingRouter(adminReportingService));
 
   app.get("/me", authenticate, (request, response) => {
     response.status(200).json(request.auth);

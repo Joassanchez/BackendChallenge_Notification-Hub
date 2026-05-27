@@ -1042,7 +1042,7 @@ Alcance previsto:
 
 ### Módulo 6 - Rate Limiting
 
-Estado: pendiente.
+Estado: completo.
 
 Alcance previsto:
 - Validar límite diario por usuario.

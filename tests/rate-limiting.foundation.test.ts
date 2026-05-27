@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "../src/generated/prisma/client.js";
 import { AppError, tooManyRequests } from "../src/shared/http/errors.js";
 import { RateLimitRepository, type DailyUsageSnapshot } from "../src/modules/rate-limiting/rate-limit.repository.js";
@@ -40,6 +40,10 @@ function createTransactionReturning(rows: DailyUsageSnapshot[]) {
 }
 
 describe("Rate limiting foundation", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("loads DAILY_MESSAGE_LIMIT as a positive integer and defaults to 100", async () => {
     await expect(importEnvWithDailyLimit("7")).resolves.toMatchObject({
       env: expect.objectContaining({ DAILY_MESSAGE_LIMIT: 7 }),
@@ -117,6 +121,60 @@ describe("Rate limiting foundation", () => {
       usageDate,
       dailyLimit: 2,
     });
+  });
+
+  it("uses the current UTC day when reserving quota without an explicit clock", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-26T23:30:00.000-03:00"));
+    const rateLimits = {
+      reserveDailyQuota: vi.fn().mockResolvedValue({
+        userId: "user-id",
+        usageDate: new Date("2026-05-27T00:00:00.000Z"),
+        sentCount: 1,
+        dailyLimit: 4,
+      }),
+      findCurrentUsage: vi.fn(),
+    };
+    const service = new RateLimitService(rateLimits, 4);
+    const { tx } = createTransactionReturning([]);
+
+    await service.reserveMessage(tx, "user-id");
+
+    expect(rateLimits.reserveDailyQuota).toHaveBeenCalledWith({
+      tx,
+      userId: "user-id",
+      usageDate: new Date("2026-05-27T00:00:00.000Z"),
+      dailyLimit: 4,
+    });
+  });
+
+  it("does not mutate quota while reading the current report", async () => {
+    const usageDate = new Date("2026-05-26T00:00:00.000Z");
+    const rateLimits = {
+      reserveDailyQuota: vi.fn(),
+      findCurrentUsage: vi.fn().mockResolvedValue({ sentCount: 2, dailyLimit: 3, usageDate, userId: "user-id" }),
+    };
+    const service = new RateLimitService(rateLimits, 3);
+
+    await expect(service.getReport("user-id", usageDate)).resolves.toEqual({
+      usageDate: "2026-05-26",
+      dailyLimit: 3,
+      usedToday: 2,
+      remainingToday: 1,
+    });
+    expect(rateLimits.reserveDailyQuota).not.toHaveBeenCalled();
+  });
+
+  it("propagates unexpected repository failures instead of rewriting them as quota exhaustion", async () => {
+    const databaseError = new Error("database unavailable");
+    const rateLimits = {
+      reserveDailyQuota: vi.fn().mockRejectedValue(databaseError),
+      findCurrentUsage: vi.fn(),
+    };
+    const service = new RateLimitService(rateLimits, 1);
+    const { tx } = createTransactionReturning([]);
+
+    await expect(service.reserveMessage(tx, "user-id", new Date("2026-05-26T10:00:00.000Z"))).rejects.toBe(databaseError);
   });
 
   it("throws RATE_LIMIT_EXCEEDED when reservation returns no row", async () => {
