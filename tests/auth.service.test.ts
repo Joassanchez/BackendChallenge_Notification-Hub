@@ -40,21 +40,6 @@ function createService(input: {
 }
 
 describe("AuthService", () => {
-  it("validates registration payloads before hashing or persistence", async () => {
-    const { service, users, passwords } = createService();
-
-    const error = await expectAppError(
-      () => service.register({ username: " ", email: "not-an-email", password: "" }),
-      { statusCode: 422, code: "VALIDATION_ERROR", message: "Invalid registration payload" },
-    );
-
-    expect(error.details).toEqual({
-      errors: ["username is required", "email must be valid", "password is required"],
-    });
-    expect(passwords.hash).not.toHaveBeenCalled();
-    expect(users.createWithDefaultRole).not.toHaveBeenCalled();
-  });
-
   it("normalizes registration data and returns a safe user DTO", async () => {
     const persistedUser = buildUserWithRoles({
       username: "alice",
@@ -99,22 +84,6 @@ describe("AuthService", () => {
       () => service.register({ username: "alice", email: "alice@example.com", password: "Password123!" }),
       { statusCode: 409, code: "CONFLICT", message: "Username or email already exists" },
     );
-  });
-
-  it("validates login payloads before repository lookup", async () => {
-    const { service, users, passwords, tokens } = createService();
-
-    const error = await expectAppError(
-      () => service.login({ identifier: " ", password: "" }),
-      { statusCode: 422, code: "VALIDATION_ERROR", message: "Invalid login payload" },
-    );
-
-    expect(error.details).toEqual({
-      errors: ["username/email is required", "password is required"],
-    });
-    expect(users.findByIdentifierWithRoles).not.toHaveBeenCalled();
-    expect(passwords.compare).not.toHaveBeenCalled();
-    expect(tokens.signAccessToken).not.toHaveBeenCalled();
   });
 
   it("rejects unknown users and invalid passwords with the same unauthorized response", async () => {

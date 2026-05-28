@@ -1,5 +1,5 @@
 import { Prisma } from "../../../generated/prisma/client.js";
-import { conflict, unauthorized, unprocessable } from "../../../shared/http/errors.js";
+import { conflict, unauthorized } from "../../../shared/http/errors.js";
 import { toSafeUserDto, type SafeUserDto } from "../users/user-mapper.js";
 import type { UserRepository } from "../users/user-repository.js";
 import type { PasswordService } from "./password.service.js";
@@ -29,8 +29,6 @@ export class AuthService {
   ) {}
 
   async register(input: RegisterInput): Promise<SafeUserDto> {
-    validateRegisterInput(input);
-
     const passwordHash = await this.passwords.hash(input.password);
 
     try {
@@ -52,8 +50,6 @@ export class AuthService {
   }
 
   async login(input: LoginInput): Promise<LoginResult> {
-    validateLoginInput(input);
-
     const user = await this.users.findByIdentifierWithRoles(input.identifier.trim());
 
     if (user === null) {
@@ -72,42 +68,6 @@ export class AuthService {
       accessToken: this.tokens.signAccessToken(user.id),
       tokenType: "Bearer",
     };
-  }
-}
-
-function validateRegisterInput(input: RegisterInput): void {
-  const errors: string[] = [];
-
-  if (input.username.trim().length === 0) {
-    errors.push("username is required");
-  }
-
-  if (input.email !== undefined && input.email.trim().length > 0 && !input.email.includes("@")) {
-    errors.push("email must be valid");
-  }
-
-  if (input.password.length === 0) {
-    errors.push("password is required");
-  }
-
-  if (errors.length > 0) {
-    throw unprocessable("Invalid registration payload", { errors });
-  }
-}
-
-function validateLoginInput(input: LoginInput): void {
-  const errors: string[] = [];
-
-  if (input.identifier.trim().length === 0) {
-    errors.push("username/email is required");
-  }
-
-  if (input.password.length === 0) {
-    errors.push("password is required");
-  }
-
-  if (errors.length > 0) {
-    throw unprocessable("Invalid login payload", { errors });
   }
 }
 
