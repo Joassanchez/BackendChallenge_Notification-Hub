@@ -1,24 +1,14 @@
-import type { NextFunction, Request, Response, Router } from "express";
+import type { Router } from "express";
 import { Router as createRouter } from "express";
+import { asyncHandler } from "../../../shared/http/async-handler.js";
+import { ProviderController } from "./provider.controller.js";
 import type { ProviderService } from "./provider.service.js";
-
-type AsyncHandler = (request: Request, response: Response, next: NextFunction) => Promise<void>;
-
-function asyncHandler(handler: AsyncHandler) {
-  return (request: Request, response: Response, next: NextFunction): void => {
-    void handler(request, response, next).catch(next);
-  };
-}
 
 export function createProviderRouter(providerService: ProviderService): Router {
   const router = createRouter();
+  const controller = new ProviderController(providerService);
 
-  router.get(
-    "/",
-    asyncHandler(async (_request, response) => {
-      response.status(200).json(await providerService.listActiveProviders());
-    }),
-  );
+  router.get("/", asyncHandler(controller.listActiveProviders));
 
   return router;
 }

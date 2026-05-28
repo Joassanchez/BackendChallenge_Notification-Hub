@@ -1,30 +1,14 @@
-import type { NextFunction, Request, Response, Router } from "express";
+import type { Router } from "express";
 import { Router as createRouter } from "express";
+import { asyncHandler } from "../../../shared/http/async-handler.js";
+import { AdminMetricsController } from "./admin-metrics.controller.js";
 import type { AdminMetricsService } from "./admin-metrics.service.js";
-
-type AsyncHandler = (request: Request, response: Response, next: NextFunction) => Promise<void>;
-
-function asyncHandler(handler: AsyncHandler) {
-  return (request: Request, response: Response, next: NextFunction): void => {
-    void handler(request, response, next).catch(next);
-  };
-}
 
 export function createAdminMetricsRouter(adminMetricsService: AdminMetricsService): Router {
   const router = createRouter();
+  const controller = new AdminMetricsController(adminMetricsService);
 
-  router.get(
-    "/metrics",
-    asyncHandler(async (request, response) => {
-      const metrics = await adminMetricsService.getMetrics(readQueryRecord(request.query));
-
-      response.status(200).json({ metrics });
-    }),
-  );
+  router.get("/metrics", asyncHandler(controller.getMetrics));
 
   return router;
-}
-
-function readQueryRecord(query: Request["query"]): Record<string, unknown> {
-  return query as Record<string, unknown>;
 }
