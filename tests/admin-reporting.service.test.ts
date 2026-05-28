@@ -11,7 +11,6 @@ import type {
   AdminReportingRepository,
 } from "../src/modules/administration/reporting/admin-reporting.repository.js";
 import { AdminReportingService } from "../src/modules/administration/reporting/admin-reporting.service.js";
-import { expectAppError } from "./helpers/service-fixtures.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const otherUserId = "22222222-2222-4222-8222-222222222222";
@@ -123,10 +122,10 @@ function buildDailyUsage(input: { userId: string; sentCount: number; dailyLimit:
 }
 
 describe("AdminReportingService", () => {
-  it("validates message filters and normalizes supported date/provider filters before querying", async () => {
+  it("passes typed message filters directly to the repository", async () => {
     const { service, reports } = createService();
-    const from = "2026-01-01";
-    const to = "2026-01-02T23:59:59.000Z";
+    const from = new Date("2026-01-01T00:00:00.000Z");
+    const to = new Date("2026-01-02T23:59:59.000Z");
 
     await expect(
       service.listMessages({
@@ -142,29 +141,9 @@ describe("AdminReportingService", () => {
       userId,
       status: MessageStatus.success,
       provider: ProviderCode.telegram,
-      from: new Date("2026-01-01T00:00:00.000Z"),
-      to: new Date(to),
+      from,
+      to,
     });
-  });
-
-  it.each([
-    ["unsupported", { unexpected: "value" }, "Unsupported query parameter: unexpected"],
-    ["multi value", { userId: [userId] }, "userId must be a single value"],
-    ["invalid UUID", { userId: "not-a-uuid" }, "userId must be a valid UUID"],
-    ["invalid status", { status: "unknown" }, "status must be a valid message status"],
-    ["invalid provider", { provider: "email" }, "provider must be a valid provider code"],
-    ["missing timezone", { from: "2026-01-01T00:00:00" }, "from must include a UTC offset or Z timezone"],
-    ["invalid date", { from: "2026-02-31" }, "from must be a valid date"],
-    [
-      "inverted range",
-      { from: "2026-01-03T00:00:00.000Z", to: "2026-01-02T00:00:00.000Z" },
-      "from must be before or equal to to",
-    ],
-  ] satisfies Array<[string, Record<string, unknown>, string]>)("rejects %s message filters", async (_name, query, message) => {
-    const { service, reports } = createService();
-
-    await expectAppError(() => service.listMessages(query), { statusCode: 400, code: "BAD_REQUEST", message });
-    expect(reports.listMessages).not.toHaveBeenCalled();
   });
 
   it("maps admin message rows to stable DTO shape with provider delivery aggregation", async () => {
@@ -206,7 +185,7 @@ describe("AdminReportingService", () => {
     });
     const now = new Date("2026-01-02T18:30:00.000Z");
 
-    await expect(metricsService.getMetrics({}, now)).resolves.toEqual([
+    await expect(metricsService.getMetrics(now)).resolves.toEqual([
       {
         userId,
         email: "vitest_sender@example.com",
@@ -235,7 +214,7 @@ describe("AdminReportingService", () => {
       users: [buildUser({ id: userId, username: "vitest_zero" })],
     });
 
-    await expect(metricsService.getMetrics({}, new Date("2026-01-02T00:00:00.000Z"))).resolves.toEqual([
+    await expect(metricsService.getMetrics(new Date("2026-01-02T00:00:00.000Z"))).resolves.toEqual([
       {
         userId,
         email: "vitest_zero@example.com",
@@ -248,16 +227,4 @@ describe("AdminReportingService", () => {
     ]);
   });
 
-  it("rejects unsupported metric filters before reading report data", async () => {
-    const { metricsService, metrics } = createService();
-
-    await expectAppError(() => metricsService.getMetrics({ userId }), {
-      statusCode: 400,
-      code: "BAD_REQUEST",
-      message: "Unsupported query parameter: userId",
-    });
-    expect(metrics.listUsers).not.toHaveBeenCalled();
-    expect(metrics.countMessagesByUser).not.toHaveBeenCalled();
-    expect(metrics.listDailyUsageForDate).not.toHaveBeenCalled();
-  });
 });

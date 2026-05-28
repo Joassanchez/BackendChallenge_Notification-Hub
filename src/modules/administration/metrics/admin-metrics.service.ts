@@ -1,4 +1,3 @@
-import { badRequest } from "../../../shared/http/errors.js";
 import type { AdminMetricsDailyUsage, AdminMetricsRepository, AdminMetricsUser } from "./admin-metrics.repository.js";
 
 export type AdminMetricsDto = {
@@ -19,9 +18,7 @@ export class AdminMetricsService {
     private readonly defaultDailyLimit: number,
   ) {}
 
-  async getMetrics(query: Record<string, unknown>, now = new Date()): Promise<AdminMetricsDto[]> {
-    assertSupportedKeys(query, []);
-
+  async getMetrics(now = new Date()): Promise<AdminMetricsDto[]> {
     const usageDate = toUtcUsageDate(now);
     const [users, messageCounts, dailyUsage] = await Promise.all([
       this.metrics.listUsers(),
@@ -33,14 +30,6 @@ export class AdminMetricsService {
     const usageByUser = new Map(dailyUsage.map((usage) => [usage.userId, usage]));
 
     return users.map((user) => toAdminMetricsDto(user, countsByUser.get(user.id) ?? 0, usageByUser.get(user.id), this.defaultDailyLimit));
-  }
-}
-
-function assertSupportedKeys(query: Record<string, unknown>, supportedKeys: readonly string[]): void {
-  for (const key of Object.keys(query)) {
-    if (!supportedKeys.includes(key)) {
-      throw badRequest(`Unsupported query parameter: ${key}`);
-    }
   }
 }
 
