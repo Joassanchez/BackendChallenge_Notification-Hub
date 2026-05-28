@@ -1,4 +1,5 @@
 import express from "express";
+import * as swaggerUi from "swagger-ui-express";
 import { AdminReportingRepository } from "./modules/admin-reporting/admin-reporting.repository.js";
 import { createAdminReportingRouter } from "./modules/admin-reporting/admin-reporting.routes.js";
 import { AdminReportingService } from "./modules/admin-reporting/admin-reporting.service.js";
@@ -25,6 +26,7 @@ import { RateLimitRepository } from "./modules/rate-limiting/rate-limit.reposito
 import { createRateLimitRouter } from "./modules/rate-limiting/rate-limit.routes.js";
 import { RateLimitService } from "./modules/rate-limiting/rate-limit.service.js";
 import { requireRole } from "./modules/roles/require-role.middleware.js";
+import { openApiDocument } from "./openapi.js";
 import { UserRepository } from "./modules/users/user-repository.js";
 import { env } from "./shared/config/env.js";
 import { prisma } from "./shared/database/prisma.js";
@@ -57,6 +59,11 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.get("/health", (_request, response) => {
     response.status(200).json({ status: "ok" });
   });
+
+  app.get("/openapi.json", (_request, response) => {
+    response.status(200).json(openApiDocument);
+  });
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
 
   app.use("/auth", createAuthRouter(authService));
   app.use("/providers", authenticate, createProviderRouter(providerService));
