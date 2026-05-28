@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { AttemptStatus, DeliveryStatus, Prisma, ProviderCode } from "../src/generated/prisma/client.js";
-import type { DeliveryConfigResolver, DeliveryConfigResolution } from "../src/modules/delivery-execution/delivery-config-resolver.js";
-import { DeliveryExecutionService } from "../src/modules/delivery-execution/delivery-execution.service.js";
+import type { DeliveryConfigResolver, DeliveryConfigResolution } from "../src/modules/delivery/execution/delivery-config-resolver.js";
+import { DeliveryExecutionService } from "../src/modules/delivery/execution/delivery-execution.service.js";
 import type {
   CompleteDeliveryInput,
   DeliveryExecutionRepository,
   ExecutableDelivery,
-} from "../src/modules/delivery-execution/delivery-execution.repository.js";
+} from "../src/modules/delivery/execution/delivery-execution.repository.js";
 import type {
   DeliveryProviderAdapter,
   DeliveryProviderRegistry,
   DeliveryProviderResult,
-} from "../src/modules/delivery-execution/delivery-provider-adapter.js";
+} from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
 import { messageId, telegramTargetId } from "./helpers/service-fixtures.js";
 
 const deliveryId = "66666666-6666-4666-8666-666666666666";

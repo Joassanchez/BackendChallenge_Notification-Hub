@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProviderCode, type Prisma } from "../src/generated/prisma/client.js";
-import type { NotificationTargetRepository, NotificationTargetWithProvider } from "../src/modules/notification-targets/notification-target.repository.js";
-import { NotificationTargetService } from "../src/modules/notification-targets/notification-target.service.js";
-import type { ProviderConnectionWithProvider, ProviderRepository } from "../src/modules/providers/provider.repository.js";
-import { ProviderService } from "../src/modules/providers/provider.service.js";
+import type { NotificationTargetRepository, NotificationTargetWithProvider } from "../src/modules/notifications/notification-targets/notification-target.repository.js";
+import { NotificationTargetService } from "../src/modules/notifications/notification-targets/notification-target.service.js";
+import type { ProviderConnectionRepository, ProviderConnectionWithProvider } from "../src/modules/delivery/provider-connections/provider-connection.repository.js";
+import { ProviderConnectionService } from "../src/modules/delivery/provider-connections/provider-connection.service.js";
+import type { ProviderRepository } from "../src/modules/delivery/providers/provider.repository.js";
+import { ProviderService } from "../src/modules/delivery/providers/provider.service.js";
 import { expectAppError, telegramTargetId } from "./helpers/service-fixtures.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -76,15 +78,19 @@ function buildTarget(input: {
   };
 }
 
-function createProviderService(input: { connections?: ProviderConnectionWithProvider[] } = {}) {
+function createProviderServices(input: { connections?: ProviderConnectionWithProvider[] } = {}) {
   const providers = {
     findActiveProviders: vi.fn(async () => [buildProvider(), buildProvider({ code: ProviderCode.discord })]),
+  };
+  const providerConnections = {
     findProviderConnectionsForAdmin: vi.fn(async () => input.connections ?? []),
   };
 
   return {
-    service: new ProviderService(providers as unknown as ProviderRepository),
+    providerService: new ProviderService(providers as unknown as ProviderRepository),
+    providerConnectionService: new ProviderConnectionService(providerConnections as unknown as ProviderConnectionRepository),
     providers,
+    providerConnections,
   };
 }
 
@@ -115,23 +121,23 @@ function createTargetService(input: {
   };
 }
 
-describe("ProviderService", () => {
+describe("Provider and ProviderConnection services", () => {
   it("lists active providers without connection secrets and masks admin connection secret refs", async () => {
-    const { service } = createProviderService({
+    const { providerService, providerConnectionService } = createProviderServices({
       connections: [
         buildProviderConnection({ secretRef: "TELEGRAM_BOT_TOKEN" }),
         buildProviderConnection({ id: discordConnectionId, providerCode: ProviderCode.discord, secretRef: null }),
       ],
     });
 
-    await expect(service.listActiveProviders()).resolves.toEqual({
+    await expect(providerService.listActiveProviders()).resolves.toEqual({
       providers: [
         { code: ProviderCode.telegram, name: "Telegram" },
         { code: ProviderCode.discord, name: "Discord" },
       ],
     });
 
-    await expect(service.listProviderConnectionsForAdmin()).resolves.toEqual({
+    await expect(providerConnectionService.listProviderConnectionsForAdmin()).resolves.toEqual({
       providerConnections: [
         expect.objectContaining({
           id: connectionId,

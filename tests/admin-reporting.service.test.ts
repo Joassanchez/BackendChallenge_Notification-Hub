@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { DeliveryStatus, MessageStatus, ProviderCode, type Prisma } from "../src/generated/prisma/client.js";
 import type {
-  AdminReportingDailyUsage,
+  AdminMetricsDailyUsage,
+  AdminMetricsRepository,
+  AdminMetricsUser,
+} from "../src/modules/administration/metrics/admin-metrics.repository.js";
+import { AdminMetricsService } from "../src/modules/administration/metrics/admin-metrics.service.js";
+import type {
   AdminReportingMessage,
   AdminReportingRepository,
-  AdminReportingUser,
-} from "../src/modules/admin-reporting/admin-reporting.repository.js";
-import { AdminReportingService } from "../src/modules/admin-reporting/admin-reporting.service.js";
+} from "../src/modules/administration/reporting/admin-reporting.repository.js";
+import { AdminReportingService } from "../src/modules/administration/reporting/admin-reporting.service.js";
 import { expectAppError } from "./helpers/service-fixtures.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -17,25 +21,30 @@ const providerId = "55555555-5555-4555-8555-555555555555";
 const targetId = "66666666-6666-4666-8666-666666666666";
 const connectionId = "77777777-7777-4777-8777-777777777777";
 
-type AdminReportingStore = Pick<AdminReportingRepository, "listMessages" | "listUsers" | "countMessagesByUser" | "listDailyUsageForDate">;
+type AdminReportingStore = Pick<AdminReportingRepository, "listMessages">;
+type AdminMetricsStore = Pick<AdminMetricsRepository, "listUsers" | "countMessagesByUser" | "listDailyUsageForDate">;
 
 function createService(input: {
   messages?: AdminReportingMessage[];
-  users?: AdminReportingUser[];
+  users?: AdminMetricsUser[];
   messageCounts?: Array<{ userId: string; count: number }>;
-  dailyUsage?: AdminReportingDailyUsage[];
+  dailyUsage?: AdminMetricsDailyUsage[];
   defaultDailyLimit?: number;
 } = {}) {
   const reports = {
     listMessages: vi.fn(async () => input.messages ?? []),
+  } satisfies AdminReportingStore;
+  const metrics = {
     listUsers: vi.fn(async () => input.users ?? []),
     countMessagesByUser: vi.fn(async () => input.messageCounts ?? []),
     listDailyUsageForDate: vi.fn(async () => input.dailyUsage ?? []),
-  } satisfies AdminReportingStore;
+  } satisfies AdminMetricsStore;
 
   return {
-    service: new AdminReportingService(reports, input.defaultDailyLimit ?? 100),
+    service: new AdminReportingService(reports),
+    metricsService: new AdminMetricsService(metrics, input.defaultDailyLimit ?? 100),
     reports,
+    metrics,
   };
 }
 
@@ -95,7 +104,7 @@ function buildAdminMessage(input: {
   };
 }
 
-function buildUser(input: { id: string; username: string; email?: string | null }): AdminReportingUser {
+function buildUser(input: { id: string; username: string; email?: string | null }): AdminMetricsUser {
   return {
     id: input.id,
     username: input.username,
@@ -104,7 +113,7 @@ function buildUser(input: { id: string; username: string; email?: string | null 
   };
 }
 
-function buildDailyUsage(input: { userId: string; sentCount: number; dailyLimit: number }): AdminReportingDailyUsage {
+function buildDailyUsage(input: { userId: string; sentCount: number; dailyLimit: number }): AdminMetricsDailyUsage {
   return {
     userId: input.userId,
     usageDate: new Date("2026-01-02T00:00:00.000Z"),
@@ -186,7 +195,7 @@ describe("AdminReportingService", () => {
   });
 
   it("returns metrics for every user with default quotas and non-negative remaining values", async () => {
-    const { service, reports } = createService({
+    const { metricsService, metrics } = createService({
       defaultDailyLimit: 7,
       users: [
         buildUser({ id: userId, username: "vitest_sender" }),
@@ -197,7 +206,7 @@ describe("AdminReportingService", () => {
     });
     const now = new Date("2026-01-02T18:30:00.000Z");
 
-    await expect(service.getMetrics({}, now)).resolves.toEqual([
+    await expect(metricsService.getMetrics({}, now)).resolves.toEqual([
       {
         userId,
         email: "vitest_sender@example.com",
@@ -217,16 +226,16 @@ describe("AdminReportingService", () => {
         remainingToday: 0,
       },
     ]);
-    expect(reports.listDailyUsageForDate).toHaveBeenCalledWith(new Date("2026-01-02T00:00:00.000Z"));
+    expect(metrics.listDailyUsageForDate).toHaveBeenCalledWith(new Date("2026-01-02T00:00:00.000Z"));
   });
 
   it("uses metric defaults when a user has no message count or usage row", async () => {
-    const { service } = createService({
+    const { metricsService } = createService({
       defaultDailyLimit: 25,
       users: [buildUser({ id: userId, username: "vitest_zero" })],
     });
 
-    await expect(service.getMetrics({}, new Date("2026-01-02T00:00:00.000Z"))).resolves.toEqual([
+    await expect(metricsService.getMetrics({}, new Date("2026-01-02T00:00:00.000Z"))).resolves.toEqual([
       {
         userId,
         email: "vitest_zero@example.com",
@@ -240,15 +249,15 @@ describe("AdminReportingService", () => {
   });
 
   it("rejects unsupported metric filters before reading report data", async () => {
-    const { service, reports } = createService();
+    const { metricsService, metrics } = createService();
 
-    await expectAppError(() => service.getMetrics({ userId }), {
+    await expectAppError(() => metricsService.getMetrics({ userId }), {
       statusCode: 400,
       code: "BAD_REQUEST",
       message: "Unsupported query parameter: userId",
     });
-    expect(reports.listUsers).not.toHaveBeenCalled();
-    expect(reports.countMessagesByUser).not.toHaveBeenCalled();
-    expect(reports.listDailyUsageForDate).not.toHaveBeenCalled();
+    expect(metrics.listUsers).not.toHaveBeenCalled();
+    expect(metrics.countMessagesByUser).not.toHaveBeenCalled();
+    expect(metrics.listDailyUsageForDate).not.toHaveBeenCalled();
   });
 });

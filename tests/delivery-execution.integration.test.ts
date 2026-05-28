@@ -1,9 +1,9 @@
-﻿import request from "supertest";
+import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { AttemptStatus, DeliveryStatus, Prisma, PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
-import type { DeliveryProviderAdapter, DeliveryProviderResult } from "../src/modules/delivery-execution/delivery-provider-adapter.js";
-import { redactResolvedSecretFromProviderResponse, redactResolvedSecretFromString } from "../src/modules/delivery-execution/delivery-provider-adapter.js";
+import type { DeliveryProviderAdapter, DeliveryProviderResult } from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
+import { redactResolvedSecretFromProviderResponse, redactResolvedSecretFromString } from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
 
 process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";

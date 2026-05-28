@@ -1,4 +1,4 @@
-﻿import type { AuthenticatedUser } from "../modules/auth/auth-context.js";
+import type { AuthenticatedUser } from "../modules/identity/auth/auth-context.js";
 
 declare global {
   namespace Express {

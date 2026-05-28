@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "../src/generated/prisma/client.js";
 import { AppError, tooManyRequests } from "../src/shared/http/errors.js";
-import { RateLimitRepository, type DailyUsageSnapshot } from "../src/modules/rate-limiting/rate-limit.repository.js";
-import { RateLimitService, toUtcUsageDate } from "../src/modules/rate-limiting/rate-limit.service.js";
+import { RateLimitRepository, type DailyUsageSnapshot } from "../src/modules/quota/rate-limiting/rate-limit.repository.js";
+import { RateLimitService, toUtcUsageDate } from "../src/modules/quota/rate-limiting/rate-limit.service.js";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

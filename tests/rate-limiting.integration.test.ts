@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
-import type { DeliveryProviderRegistry } from "../src/modules/delivery-execution/delivery-provider-adapter.js";
+import type { DeliveryProviderRegistry } from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
 
 process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
@@ -12,9 +12,9 @@ process.env.DAILY_MESSAGE_LIMIT = "2";
 
 const { createApp } = await import("../src/app.js");
 const { prisma: appPrisma } = await import("../src/shared/database/prisma.js");
-const { MessageRepository } = await import("../src/modules/messages/message-repository.js");
-const { RateLimitRepository } = await import("../src/modules/rate-limiting/rate-limit.repository.js");
-const { RateLimitService } = await import("../src/modules/rate-limiting/rate-limit.service.js");
+const { MessageRepository } = await import("../src/modules/notifications/messages/message-repository.js");
+const { RateLimitRepository } = await import("../src/modules/quota/rate-limiting/rate-limit.repository.js");
+const { RateLimitService } = await import("../src/modules/quota/rate-limiting/rate-limit.service.js");
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),

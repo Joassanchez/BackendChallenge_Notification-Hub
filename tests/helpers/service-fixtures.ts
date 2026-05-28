@@ -1,8 +1,8 @@
 import { expect } from "vitest";
 import { DeliveryStatus, MessageStatus, ProviderCode, RoleCode } from "../../src/generated/prisma/client.js";
 import { AppError } from "../../src/shared/http/errors.js";
-import type { UserWithRoles } from "../../src/modules/users/user-mapper.js";
-import type { MessageWithDeliveries, NormalizedDestination } from "../../src/modules/messages/message-repository.js";
+import type { UserWithRoles } from "../../src/modules/identity/users/user-mapper.js";
+import type { MessageWithDeliveries, NormalizedDestination } from "../../src/modules/notifications/messages/message-repository.js";
 
 export const userId = "11111111-1111-4111-8111-111111111111";
 export const messageId = "22222222-2222-4222-8222-222222222222";
