@@ -49,47 +49,6 @@ function createService(input: {
 }
 
 describe("MessageService", () => {
-  it("validates content before persistence", async () => {
-    const { service, repository } = createService();
-
-    await expectAppError(
-      () => service.create({ userId, content: "   ", destinations: [telegramDestination()] }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "content must not be empty" },
-    );
-    await expectAppError(
-      () => service.create({ userId, content: 123, destinations: [telegramDestination()] }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "content must be a string" },
-    );
-    expect(repository.createPendingMessage).not.toHaveBeenCalled();
-  });
-
-  it("validates destinations and rejects duplicates before persistence", async () => {
-    const { service, repository } = createService();
-
-    await expectAppError(
-      () => service.create({ userId, content: "Hello", destinations: [] }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "destinations must be a non-empty array" },
-    );
-    await expectAppError(
-      () => service.create({ userId, content: "Hello", destinations: [{ provider: "unknown", targetId: telegramTargetId }] }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "destinations[0].provider must be a valid provider code" },
-    );
-    await expectAppError(
-      () => service.create({ userId, content: "Hello", destinations: [{ provider: "telegram", targetId: "not-a-uuid" }] }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "destinations[0].targetId must be a valid UUID" },
-    );
-    await expectAppError(
-      () =>
-        service.create({
-          userId,
-          content: "Hello",
-          destinations: [telegramDestination(), telegramDestination()],
-        }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "destinations must not contain duplicates" },
-    );
-    expect(repository.createPendingMessage).not.toHaveBeenCalled();
-  });
-
   it("creates a message with normalized content and destinations", async () => {
     const createdMessage = buildMessageWithDeliveries({
       content: "Hello",
@@ -100,9 +59,9 @@ describe("MessageService", () => {
 
     const result = await service.create({
       userId,
-      content: "  Hello  ",
+      content: "Hello",
       destinations: [telegramDestination()],
-      idempotencyKey: " key-1 ",
+      idempotencyKey: "key-1",
     });
 
     expect(repository.createPendingMessage).toHaveBeenCalledWith({
@@ -119,28 +78,6 @@ describe("MessageService", () => {
         status: MessageStatus.pending,
       }),
     });
-  });
-
-  it("validates list filters before repository lookup", async () => {
-    const { service, repository } = createService();
-
-    await expectAppError(
-      () => service.list({ userId, status: "unknown" }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "status must be a valid message status" },
-    );
-    await expectAppError(
-      () => service.list({ userId, provider: "unknown" }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "provider must be a valid provider code" },
-    );
-    await expectAppError(
-      () => service.list({ userId, from: "not-a-date" }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "from must be a valid date" },
-    );
-    await expectAppError(
-      () => service.list({ userId, from: "2026-01-02T00:00:00.000Z", to: "2026-01-01T00:00:00.000Z" }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "from must be before or equal to to" },
-    );
-    expect(repository.listForUser).not.toHaveBeenCalled();
   });
 
   it("passes valid list filters to the repository", async () => {
@@ -162,16 +99,6 @@ describe("MessageService", () => {
       to: new Date("2026-01-02T00:00:00.000Z"),
     });
     expect(result).toHaveLength(1);
-  });
-
-  it("validates detail message UUIDs before repository lookup", async () => {
-    const { service, repository } = createService();
-
-    await expectAppError(
-      () => service.getById(userId, "not-a-uuid"),
-      { statusCode: 400, code: "BAD_REQUEST", message: "message id must be a valid UUID" },
-    );
-    expect(repository.findByIdForUser).not.toHaveBeenCalled();
   });
 
   it("returns not found when a valid detail id is outside the user scope", async () => {

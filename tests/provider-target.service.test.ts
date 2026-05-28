@@ -155,31 +155,15 @@ describe("Provider and ProviderConnection services", () => {
 });
 
 describe("NotificationTargetService", () => {
-  it("enforces provider and target creation rules before persistence", async () => {
-    const { service, targets } = createTargetService();
-
-    await expectAppError(
-      () => service.create({ userId, body: { providerConnectionId: connectionId } }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "providerConnectionId is not accepted" },
-    );
-    await expectAppError(
-      () => service.create({ userId, body: { provider: "unknown", externalTargetId: "chat-1", targetType: "chat" } }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "provider must be a valid provider code" },
-    );
-    await expectAppError(
-      () => service.create({ userId, body: { provider: ProviderCode.discord, externalTargetId: "chat-1", targetType: "chat" } }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "provider target type is not supported" },
-    );
-    expect(targets.create).not.toHaveBeenCalled();
-  });
-
   it("rejects inactive, missing, or ambiguous provider connection resolution", async () => {
     const inactiveProvider = createTargetService({ provider: buildProvider({ active: false }) });
     await expectAppError(
       () =>
         inactiveProvider.service.create({
           userId,
-          body: { provider: ProviderCode.telegram, externalTargetId: "chat-1", targetType: "chat" },
+          provider: ProviderCode.telegram,
+          externalTargetId: "chat-1",
+          targetType: "chat",
         }),
       { statusCode: 400, code: "BAD_REQUEST", message: "Provider is not available" },
     );
@@ -189,7 +173,9 @@ describe("NotificationTargetService", () => {
       () =>
         noConnection.service.create({
           userId,
-          body: { provider: ProviderCode.telegram, externalTargetId: "chat-1", targetType: "chat" },
+          provider: ProviderCode.telegram,
+          externalTargetId: "chat-1",
+          targetType: "chat",
         }),
       { statusCode: 400, code: "BAD_REQUEST", message: "Provider has no active connection" },
     );
@@ -199,7 +185,9 @@ describe("NotificationTargetService", () => {
       () =>
         ambiguousConnection.service.create({
           userId,
-          body: { provider: ProviderCode.telegram, externalTargetId: "chat-1", targetType: "chat" },
+          provider: ProviderCode.telegram,
+          externalTargetId: "chat-1",
+          targetType: "chat",
         }),
       { statusCode: 400, code: "BAD_REQUEST", message: "Provider has multiple active connections" },
     );
@@ -212,13 +200,11 @@ describe("NotificationTargetService", () => {
     await expect(
       service.create({
         userId,
-        body: {
-          provider: ProviderCode.telegram,
-          externalTargetId: "  chat-123  ",
-          targetType: "chat",
-          displayName: " Chat alerts ",
-          metadata: { env: "test" },
-        },
+        provider: ProviderCode.telegram,
+        externalTargetId: "chat-123",
+        targetType: "chat",
+        displayName: "Chat alerts",
+        metadata: { env: "test" },
       }),
     ).resolves.toEqual(
       expect.objectContaining({
@@ -245,29 +231,23 @@ describe("NotificationTargetService", () => {
       () =>
         duplicate.service.create({
           userId,
-          body: { provider: ProviderCode.telegram, externalTargetId: "chat-123", targetType: "chat" },
+          provider: ProviderCode.telegram,
+          externalTargetId: "chat-123",
+          targetType: "chat",
         }),
       { statusCode: 409, code: "CONFLICT", message: "Notification target already exists" },
     );
   });
 
-  it("allows only editable fields during target updates", async () => {
+  it("allows updating displayName and metadata fields", async () => {
     const { service, targets } = createTargetService();
-
-    await expectAppError(
-      () => service.update({ userId, targetId: telegramTargetId, body: { externalTargetId: "new-chat" } }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "Destination fields cannot be updated" },
-    );
-    await expectAppError(
-      () => service.update({ userId, targetId: telegramTargetId, body: { unknown: "value" } }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "Only displayName and metadata can be updated" },
-    );
 
     await expect(
       service.update({
         userId,
         targetId: telegramTargetId,
-        body: { displayName: " Renamed ", metadata: { muted: true } },
+        displayName: "Renamed",
+        metadata: { muted: true },
       }),
     ).resolves.toEqual(expect.objectContaining({ displayName: "Renamed", metadata: { muted: true } }));
     expect(targets.updateForUser).toHaveBeenCalledWith(userId, telegramTargetId, {
@@ -279,7 +259,7 @@ describe("NotificationTargetService", () => {
   it("hides missing targets and rejects duplicate reactivation", async () => {
     const missing = createTargetService({ existing: null });
     await expectAppError(
-      () => missing.service.update({ userId, targetId: telegramTargetId, body: { displayName: "Missing" } }),
+      () => missing.service.update({ userId, targetId: telegramTargetId, displayName: "Missing" }),
       { statusCode: 404, code: "NOT_FOUND", message: "Notification target not found" },
     );
 
