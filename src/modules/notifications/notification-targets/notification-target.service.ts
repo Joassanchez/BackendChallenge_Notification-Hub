@@ -1,17 +1,10 @@
-import { Prisma, ProviderCode, type ProviderCode as ProviderCodeType } from "../../../generated/prisma/client.js";
+import { Prisma, type ProviderCode as ProviderCodeType } from "../../../generated/prisma/client.js";
 import { badRequest, conflict, notFound } from "../../../shared/http/errors.js";
 import type {
   NotificationTargetRepository,
   NotificationTargetWithProvider,
   UpdateNotificationTargetData,
 } from "./notification-target.repository.js";
-
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-const allowedTargetTypes: Readonly<Record<"telegram" | "discord", string>> = {
-  [ProviderCode.telegram]: "chat",
-  [ProviderCode.discord]: "webhook",
-} as const;
 
 export type NotificationTargetDto = {
   id: string;
@@ -27,13 +20,18 @@ export type NotificationTargetDto = {
 
 export type CreateNotificationTargetInput = {
   userId: string;
-  body: unknown;
+  provider: ProviderCodeType;
+  targetType: string;
+  externalTargetId: string;
+  displayName?: string | null;
+  metadata?: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
 };
 
 export type UpdateNotificationTargetInput = {
   userId: string;
   targetId: string;
-  body: unknown;
+  displayName?: string | null;
+  metadata?: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
 };
 
 export class NotificationTargetService {
@@ -48,17 +46,7 @@ export class NotificationTargetService {
   }
 
   async create(input: CreateNotificationTargetInput): Promise<NotificationTargetDto> {
-    const body = readBodyRecord(input.body);
-
-    if ("providerConnectionId" in body) {
-      throw badRequest("providerConnectionId is not accepted");
-    }
-
-    const providerCode = readProviderCode(body.provider);
-    const targetType = readTargetType(body.targetType);
-    validateProviderTargetType(providerCode, targetType);
-
-    const provider = await this.targets.findProviderByCode(providerCode);
+    const provider = await this.targets.findProviderByCode(input.provider);
 
     if (provider === null || !provider.isActive) {
       throw badRequest("Provider is not available");
@@ -74,12 +62,11 @@ export class NotificationTargetService {
       throw badRequest("Provider has multiple active connections");
     }
 
-    const externalTargetId = readRequiredString(body.externalTargetId, "externalTargetId");
     const duplicate = await this.targets.findActiveDuplicate({
       userId: input.userId,
       providerId: provider.id,
-      externalTargetId,
-      targetType,
+      externalTargetId: input.externalTargetId,
+      targetType: input.targetType,
     });
 
     if (duplicate !== null) {
@@ -92,36 +79,21 @@ export class NotificationTargetService {
       throw badRequest("Provider has no active connection");
     }
 
-    const displayName = readOptionalString(body.displayName, "displayName");
-    const metadata = readOptionalJsonObject(body.metadata, "metadata");
     const target = await this.targets.create({
       userId: input.userId,
       providerId: provider.id,
       providerConnectionId: activeConnection.id,
-      externalTargetId,
-      targetType,
-      ...(displayName === undefined ? {} : { displayName }),
-      ...(metadata === undefined ? {} : { metadata }),
+      externalTargetId: input.externalTargetId,
+      targetType: input.targetType,
+      ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
+      ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
     });
 
     return toNotificationTargetDto(target);
   }
 
   async update(input: UpdateNotificationTargetInput): Promise<NotificationTargetDto> {
-    const targetId = readTargetId(input.targetId);
-    const body = readBodyRecord(input.body);
-    const allowedKeys = ["displayName", "metadata"];
-    const forbiddenKeys = ["provider", "providerConnectionId", "externalTargetId", "targetType"];
-
-    if (forbiddenKeys.some((key) => key in body)) {
-      throw badRequest("Destination fields cannot be updated");
-    }
-
-    if (Object.keys(body).some((key) => !allowedKeys.includes(key))) {
-      throw badRequest("Only displayName and metadata can be updated");
-    }
-
-    const existing = await this.targets.findForUser(input.userId, targetId);
+    const existing = await this.targets.findForUser(input.userId, input.targetId);
 
     if (existing === null) {
       throw notFound("Notification target not found");
@@ -129,27 +101,20 @@ export class NotificationTargetService {
 
     const data: UpdateNotificationTargetData = {};
 
-    if ("displayName" in body) {
-      const displayName = readOptionalString(body.displayName, "displayName");
-      if (displayName !== undefined) {
-        data.displayName = displayName;
-      }
+    if (input.displayName !== undefined) {
+      data.displayName = input.displayName;
     }
 
-    if ("metadata" in body) {
-      const metadata = readOptionalJsonObject(body.metadata, "metadata");
-      if (metadata !== undefined) {
-        data.metadata = metadata;
-      }
+    if (input.metadata !== undefined) {
+      data.metadata = input.metadata;
     }
 
-    const target = await this.targets.updateForUser(input.userId, targetId, data);
+    const target = await this.targets.updateForUser(input.userId, input.targetId, data);
 
     return toNotificationTargetDto(target);
   }
 
-  async activate(userId: string, targetIdInput: string): Promise<NotificationTargetDto> {
-    const targetId = readTargetId(targetIdInput);
+  async activate(userId: string, targetId: string): Promise<NotificationTargetDto> {
     const existing = await this.targets.findForUser(userId, targetId);
 
     if (existing === null) {
@@ -173,8 +138,7 @@ export class NotificationTargetService {
     return toNotificationTargetDto(target);
   }
 
-  async deactivate(userId: string, targetIdInput: string): Promise<NotificationTargetDto> {
-    const targetId = readTargetId(targetIdInput);
+  async deactivate(userId: string, targetId: string): Promise<NotificationTargetDto> {
     const existing = await this.targets.findForUser(userId, targetId);
 
     if (existing === null) {
@@ -199,84 +163,4 @@ function toNotificationTargetDto(target: NotificationTargetWithProvider): Notifi
     createdAt: target.createdAt.toISOString(),
     updatedAt: target.updatedAt.toISOString(),
   };
-}
-
-function readBodyRecord(body: unknown): Record<string, unknown> {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return {};
-  }
-
-  return body as Record<string, unknown>;
-}
-
-function readProviderCode(value: unknown): ProviderCodeType {
-  if (typeof value !== "string" || !Object.values(ProviderCode).includes(value as ProviderCode)) {
-    throw badRequest("provider must be a valid provider code");
-  }
-
-  return value as ProviderCodeType;
-}
-
-function readTargetType(value: unknown): string {
-  return readRequiredString(value, "targetType");
-}
-
-function validateProviderTargetType(provider: ProviderCodeType, targetType: string): void {
-  if (provider !== ProviderCode.telegram && provider !== ProviderCode.discord) {
-    throw badRequest("provider target type is not supported");
-  }
-
-  if (allowedTargetTypes[provider] !== targetType) {
-    throw badRequest("provider target type is not supported");
-  }
-}
-
-function readRequiredString(value: unknown, key: string): string {
-  if (typeof value !== "string") {
-    throw badRequest(`${key} must be a string`);
-  }
-
-  const trimmed = value.trim();
-
-  if (trimmed === "") {
-    throw badRequest(`${key} must not be empty`);
-  }
-
-  return trimmed;
-}
-
-function readOptionalString(value: unknown, key: string): string | null | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === null) {
-    return null;
-  }
-
-  return readRequiredString(value, key);
-}
-
-function readOptionalJsonObject(value: unknown, key: string): Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === null) {
-    return Prisma.JsonNull;
-  }
-
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw badRequest(`${key} must be an object`);
-  }
-
-  return value as Prisma.InputJsonObject;
-}
-
-function readTargetId(value: string): string {
-  if (!uuidPattern.test(value)) {
-    throw badRequest("target id must be a valid UUID");
-  }
-
-  return value;
 }
