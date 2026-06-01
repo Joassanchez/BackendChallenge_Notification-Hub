@@ -3,7 +3,6 @@ import { MessageStatus, ProviderCode } from "../../../generated/prisma/client.js
 
 const ALLOWED_REPORTING_KEYS = new Set(["userId", "status", "provider", "from", "to"]);
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isoDateTimeWithZonePattern = /^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/i;
 
 const MESSAGE_STATUS_VALUES: string[] = Object.values(MessageStatus);
@@ -29,7 +28,7 @@ export const listMessagesQuerySchema = z
   .object({
     userId: z
       .string({ error: "userId must be a single value" })
-      .refine((v) => uuidPattern.test(v), "userId must be a valid UUID")
+      .uuid("userId must be a valid UUID")
       .optional(),
     status: z
       .string()

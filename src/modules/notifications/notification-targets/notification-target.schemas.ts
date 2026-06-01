@@ -3,8 +3,6 @@ import { ProviderCode } from "../../../generated/prisma/client.js";
 
 // --- Constants mirroring current service validation ---
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 const PROVIDER_CODE_VALUES: string[] = Object.values(ProviderCode);
 
 const allowedTargetTypes: Readonly<Record<string, string>> = {
@@ -84,5 +82,5 @@ export const updateTargetBodySchema = z
 // --- targetIdParamsSchema ---
 
 export const targetIdParamsSchema = z.object({
-  id: z.string().refine((v) => uuidPattern.test(v), "target id must be a valid UUID"),
+  id: z.string().uuid("target id must be a valid UUID"),
 });

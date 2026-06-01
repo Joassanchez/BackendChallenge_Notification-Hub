@@ -117,7 +117,7 @@ export const listMessagesQuerySchema = z
 // --- messageIdParamsSchema ---
 
 export const messageIdParamsSchema = z.object({
-  id: z.string().refine((v) => uuidPattern.test(v), "message id must be a valid UUID"),
+  id: z.string().uuid("message id must be a valid UUID"),
 });
 
 // --- idempotencyKeyHeaderSchema ---
