@@ -18,7 +18,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:coverage:docker": "docker compose run --rm test-coverage",
-    "db:migrate:deploy": "prisma migrate deploy"
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:test": "tsx scripts/migrate-test.ts"
   },
   "repository": {
     "type": "git",

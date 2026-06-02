@@ -3,8 +3,8 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { DeliveryStatus, MessageStatus, PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
+import { cleanTransactionalData } from "./helpers/db-cleanup.js";
 
-process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3001";
@@ -103,12 +103,12 @@ let fixtures: Fixtures;
 describe("Admin reporting API", () => {
   beforeAll(async () => {
     await ensureSeedData();
-    await deleteReportingTestData();
+    await cleanTransactionalData(prisma);
     fixtures = await seedReportingFixtures();
   });
 
   afterAll(async () => {
-    await deleteReportingTestData();
+    await cleanTransactionalData(prisma);
     await prisma.$disconnect();
     await appPrisma.$disconnect();
   });
@@ -496,46 +496,3 @@ async function readOnlySnapshot(): Promise<ReadOnlySnapshot> {
   };
 }
 
-async function deleteReportingTestData() {
-  await prisma.message.deleteMany({
-    where: {
-      user: {
-        username: {
-          startsWith: TEST_PREFIX,
-        },
-      },
-    },
-  });
-  await prisma.notificationTarget.deleteMany({
-    where: {
-      user: {
-        username: {
-          startsWith: TEST_PREFIX,
-        },
-      },
-    },
-  });
-  await prisma.providerConnection.deleteMany({
-    where: {
-      name: {
-        startsWith: TEST_PREFIX,
-      },
-    },
-  });
-  await prisma.dailyUsage.deleteMany({
-    where: {
-      user: {
-        username: {
-          startsWith: TEST_PREFIX,
-        },
-      },
-    },
-  });
-  await prisma.user.deleteMany({
-    where: {
-      username: {
-        startsWith: TEST_PREFIX,
-      },
-    },
-  });
-}

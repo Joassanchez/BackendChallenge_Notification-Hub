@@ -24,7 +24,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://notification_user:notification_password@postgres:5432/notification_hub_db?schema=public
+      DATABASE_URL: postgresql://notification_user:notification_password@postgres:5432/notification_hub_test?schema=public
       PORT: "3000"
       JWT_SECRET: docker_coverage_secret
       JWT_EXPIRES_IN: 1d
@@ -37,8 +37,8 @@ services:
     command: >
       sh -c "npm ci &&
       npm run db:generate &&
-      npm run db:migrate:deploy &&
-      npm run db:seed &&
+      PGPASSWORD=notification_password psql -h postgres -U notification_user -d postgres -c \"CREATE DATABASE notification_hub_test\" 2>/dev/null || true &&
+      npm run db:migrate:test &&
       npm run test:coverage"
 
 volumes:

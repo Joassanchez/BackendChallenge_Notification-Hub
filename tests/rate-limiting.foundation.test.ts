@@ -6,17 +6,14 @@ import { RateLimitService, toUtcUsageDate } from "../src/modules/quota/rate-limi
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3001";
 
 async function importEnvWithDailyLimit(value: string | undefined) {
   vi.resetModules();
-  process.env.DATABASE_URL = "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
-  process.env.JWT_SECRET = "test_jwt_secret";
-  process.env.JWT_EXPIRES_IN = "1d";
-  process.env.PORT = "3001";
+  // DATABASE_URL, JWT_SECRET, JWT_EXPIRES_IN, PORT already set by vitest.setup.ts
+  // via .env.test; do not override them.
 
   if (value === undefined) {
     process.env.DAILY_MESSAGE_LIMIT = "";

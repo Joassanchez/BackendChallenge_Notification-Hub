@@ -3,8 +3,8 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { cleanTransactionalData } from "./helpers/db-cleanup.js";
 
-process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3001";
@@ -73,16 +73,6 @@ async function ensureSeedData() {
   });
 }
 
-async function deleteTestUsers() {
-  await prisma.user.deleteMany({
-    where: {
-      username: {
-        startsWith: "vitest_",
-      },
-    },
-  });
-}
-
 function uniqueUser() {
   const suffix = `${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
   return {
@@ -94,12 +84,12 @@ function uniqueUser() {
 
 describe("Auth and roles API", () => {
   beforeAll(async () => {
+    await cleanTransactionalData(prisma);
     await ensureSeedData();
-    await deleteTestUsers();
   });
 
   afterAll(async () => {
-    await deleteTestUsers();
+    await cleanTransactionalData(prisma);
     await prisma.$disconnect();
     await appPrisma.$disconnect();
   });

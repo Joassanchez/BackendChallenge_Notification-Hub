@@ -2,8 +2,8 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, RoleCode } from "../src/generated/prisma/client.js";
+import { cleanTransactionalData } from "./helpers/db-cleanup.js";
 
-process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3001";
@@ -23,16 +23,6 @@ async function ensureSeedData() {
     where: { code: RoleCode.USER },
     update: {},
     create: { code: RoleCode.USER, name: "Default user" },
-  });
-}
-
-async function deleteRateLimitRouteTestUsers() {
-  await prisma.user.deleteMany({
-    where: {
-      username: {
-        startsWith: "rl_route_vitest_",
-      },
-    },
   });
 }
 
@@ -65,6 +55,7 @@ function formatUsageDate(date: Date) {
 
 describe("Rate limit report API", () => {
   afterAll(async () => {
+    await cleanTransactionalData(prisma);
     await prisma.$disconnect();
     await appPrisma.$disconnect();
   });
@@ -80,7 +71,7 @@ describe("Rate limit report API", () => {
 
   it("returns the authenticated user's current quota report", async () => {
     await ensureSeedData();
-    await deleteRateLimitRouteTestUsers();
+    await cleanTransactionalData(prisma);
 
     const { user, token } = await createUserAndLogin();
     const usageDate = currentUtcUsageDate();
@@ -103,6 +94,6 @@ describe("Rate limit report API", () => {
       remainingToday: 3,
     });
 
-    await deleteRateLimitRouteTestUsers();
+    await cleanTransactionalData(prisma);
   });
 });

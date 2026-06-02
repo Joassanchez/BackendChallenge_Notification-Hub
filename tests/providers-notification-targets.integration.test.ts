@@ -3,8 +3,8 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
+import { cleanTransactionalData } from "./helpers/db-cleanup.js";
 
-process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3001";
@@ -64,34 +64,6 @@ async function ensureSeedData() {
   }
 
   return userRole;
-}
-
-async function deleteProviderTargetTestData() {
-  await prisma.notificationTarget.deleteMany({
-    where: {
-      user: {
-        username: {
-          startsWith: "pnt_vitest_",
-        },
-      },
-    },
-  });
-
-  await prisma.providerConnection.deleteMany({
-    where: {
-      name: {
-        startsWith: "pnt_vitest_",
-      },
-    },
-  });
-
-  await prisma.user.deleteMany({
-    where: {
-      username: {
-        startsWith: "pnt_vitest_",
-      },
-    },
-  });
 }
 
 function uniqueUser() {
@@ -159,16 +131,17 @@ async function createTarget(input: {
 
 describe("Providers and notification targets foundation", () => {
   beforeAll(async () => {
+    await cleanTransactionalData(prisma);
     await ensureSeedData();
-    await deleteProviderTargetTestData();
   });
 
   beforeEach(async () => {
-    await deleteProviderTargetTestData();
+    await cleanTransactionalData(prisma);
+    await ensureSeedData();
   });
 
   afterAll(async () => {
-    await deleteProviderTargetTestData();
+    await cleanTransactionalData(prisma);
     await prisma.$disconnect();
     await appPrisma.$disconnect();
   });

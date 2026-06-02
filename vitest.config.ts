@@ -5,6 +5,7 @@ export default defineConfig({
     environment: "node",
     globals: false,
     pool: "forks",
+    setupFiles: ["./tests/vitest.setup.ts"],
     fileParallelism: false,
     coverage: {
       provider: "v8",

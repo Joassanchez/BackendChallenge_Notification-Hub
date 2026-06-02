@@ -3,8 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
 import type { DeliveryProviderRegistry } from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
+import { cleanTransactionalData } from "./helpers/db-cleanup.js";
 
-process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3001";
@@ -55,44 +55,6 @@ async function ensureSeedData() {
     where: { code: ProviderCode.discord },
     update: { isActive: true },
     create: { code: ProviderCode.discord, name: "Discord" },
-  });
-}
-
-async function deleteRateLimitMessageTestData() {
-  await prisma.message.deleteMany({
-    where: {
-      user: {
-        username: {
-          startsWith: "rl_msg_vitest_",
-        },
-      },
-    },
-  });
-
-  await prisma.notificationTarget.deleteMany({
-    where: {
-      user: {
-        username: {
-          startsWith: "rl_msg_vitest_",
-        },
-      },
-    },
-  });
-
-  await prisma.providerConnection.deleteMany({
-    where: {
-      name: {
-        startsWith: "rl_msg_vitest_",
-      },
-    },
-  });
-
-  await prisma.user.deleteMany({
-    where: {
-      username: {
-        startsWith: "rl_msg_vitest_",
-      },
-    },
   });
 }
 
@@ -167,11 +129,11 @@ async function findUsage(userId: string) {
 describe("Rate limiting message quota integration", () => {
   beforeAll(async () => {
     await ensureSeedData();
-    await deleteRateLimitMessageTestData();
+    await cleanTransactionalData(prisma);
   });
 
   afterAll(async () => {
-    await deleteRateLimitMessageTestData();
+    await cleanTransactionalData(prisma);
     await prisma.$disconnect();
     await appPrisma.$disconnect();
   });

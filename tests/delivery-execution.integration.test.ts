@@ -4,8 +4,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { AttemptStatus, DeliveryStatus, Prisma, PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
 import type { DeliveryProviderAdapter, DeliveryProviderResult } from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
 import { redactResolvedSecretFromProviderResponse, redactResolvedSecretFromString } from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
+import { cleanTransactionalData } from "./helpers/db-cleanup.js";
 
-process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3001";
@@ -58,13 +58,6 @@ async function ensureSeedData() {
       create: { code: provider, name: provider },
     });
   }
-}
-
-async function deleteDeliveryTestData() {
-  await prisma.message.deleteMany({ where: { user: { username: { startsWith: "delivery_vitest_" } } } });
-  await prisma.notificationTarget.deleteMany({ where: { user: { username: { startsWith: "delivery_vitest_" } } } });
-  await prisma.providerConnection.deleteMany({ where: { name: { startsWith: "delivery_vitest_" } } });
-  await prisma.user.deleteMany({ where: { username: { startsWith: "delivery_vitest_" } } });
 }
 
 function uniqueSuffix() {
@@ -139,11 +132,11 @@ async function attemptsForMessage(messageId: string) {
 describe("Delivery Execution", () => {
   beforeAll(async () => {
     await ensureSeedData();
-    await deleteDeliveryTestData();
+    await cleanTransactionalData(prisma);
   });
 
   afterAll(async () => {
-    await deleteDeliveryTestData();
+    await cleanTransactionalData(prisma);
     await prisma.$disconnect();
     await appPrisma.$disconnect();
   });

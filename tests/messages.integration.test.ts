@@ -4,8 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
 import type { DeliveryProviderRegistry } from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
+import { cleanTransactionalData } from "./helpers/db-cleanup.js";
 
-process.env.DATABASE_URL ??= "postgresql://notification_user:notification_password@localhost:5432/notification_hub_db?schema=public";
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3001";
@@ -51,44 +51,6 @@ async function ensureSeedData() {
     where: { code: ProviderCode.slack },
     update: { isActive: false },
     create: { code: ProviderCode.slack, name: "Slack", isActive: false },
-  });
-}
-
-async function deleteMessageTestData() {
-  await prisma.message.deleteMany({
-    where: {
-      user: {
-        username: {
-          startsWith: "msg_vitest_",
-        },
-      },
-    },
-  });
-
-  await prisma.notificationTarget.deleteMany({
-    where: {
-      user: {
-        username: {
-          startsWith: "msg_vitest_",
-        },
-      },
-    },
-  });
-
-  await prisma.providerConnection.deleteMany({
-    where: {
-      name: {
-        startsWith: "msg_vitest_",
-      },
-    },
-  });
-
-  await prisma.user.deleteMany({
-    where: {
-      username: {
-        startsWith: "msg_vitest_",
-      },
-    },
   });
 }
 
@@ -144,11 +106,11 @@ function authPostMessages(token: string, body: object, idempotencyKey?: string) 
 describe("Messages API", () => {
   beforeAll(async () => {
     await ensureSeedData();
-    await deleteMessageTestData();
+    await cleanTransactionalData(prisma);
   });
 
   afterAll(async () => {
-    await deleteMessageTestData();
+    await cleanTransactionalData(prisma);
     await prisma.$disconnect();
     await appPrisma.$disconnect();
   });
