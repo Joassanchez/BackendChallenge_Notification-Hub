@@ -1,5 +1,4 @@
-import type { Prisma, PrismaClient } from "../../../generated/prisma/client.js";
-import { randomUUID } from "node:crypto";
+import { Prisma, type PrismaClient } from "../../../generated/prisma/client.js";
 
 export type DailyUsageSnapshot = {
   userId: string;
@@ -7,6 +6,27 @@ export type DailyUsageSnapshot = {
   sentCount: number;
   dailyLimit: number;
 };
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  );
+}
+
+function toDailyUsageSnapshot(dailyUsage: {
+  userId: string;
+  usageDate: Date;
+  sentCount: number;
+  dailyLimit: number;
+}): DailyUsageSnapshot {
+  return {
+    userId: dailyUsage.userId,
+    usageDate: dailyUsage.usageDate,
+    sentCount: dailyUsage.sentCount,
+    dailyLimit: dailyUsage.dailyLimit,
+  };
+}
 
 export class RateLimitRepository {
   constructor(private readonly db: PrismaClient) {}
@@ -28,22 +48,56 @@ export class RateLimitRepository {
     usageDate: Date;
     dailyLimit: number;
   }): Promise<DailyUsageSnapshot | null> {
-    const reserved = await input.tx.$queryRaw<DailyUsageSnapshot[]>`
-      INSERT INTO daily_usage (id, user_id, usage_date, sent_count, daily_limit, created_at, updated_at)
-      VALUES (${randomUUID()}::uuid, ${input.userId}::uuid, ${input.usageDate}, 1, ${input.dailyLimit}, NOW(), NOW())
-      ON CONFLICT (user_id, usage_date)
-      DO UPDATE SET
-        sent_count = daily_usage.sent_count + 1,
-        daily_limit = EXCLUDED.daily_limit,
-        updated_at = NOW()
-      WHERE daily_usage.sent_count < ${input.dailyLimit}
-      RETURNING
-        user_id AS "userId",
-        usage_date AS "usageDate",
-        sent_count AS "sentCount",
-        daily_limit AS "dailyLimit"
-    `;
+    const { tx, userId, usageDate, dailyLimit } = input;
 
-    return reserved[0] ?? null;
+    const where = {
+      userId,
+      usageDate,
+      sentCount: { lt: dailyLimit },
+    };
+
+    const updateResult = await tx.dailyUsage.updateMany({
+      where,
+      data: { sentCount: { increment: 1 }, dailyLimit },
+    });
+
+    // Existing row was updated — fetch snapshot and return.
+    if (updateResult.count === 1) {
+      const snapshot = await tx.dailyUsage.findUnique({
+        where: { userId_usageDate: { userId, usageDate } },
+      });
+      // findUnique cannot return null here because the row just matched updateMany's WHERE.
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      return toDailyUsageSnapshot(snapshot!);
+    }
+
+    // No matching row — try creating one.
+    try {
+      const created = await tx.dailyUsage.create({
+        data: { userId, usageDate, sentCount: 1, dailyLimit },
+      });
+      return toDailyUsageSnapshot(created);
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      // Row was concurrently inserted — retry updateMany.
+      const retryResult = await tx.dailyUsage.updateMany({
+        where,
+        data: { sentCount: { increment: 1 }, dailyLimit },
+      });
+
+      if (retryResult.count === 1) {
+        const snapshot = await tx.dailyUsage.findUnique({
+          where: { userId_usageDate: { userId, usageDate } },
+        });
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        return toDailyUsageSnapshot(snapshot!);
+      }
+
+      // Limit reached — the existing row has sentCount >= dailyLimit.
+      return null;
+    }
   }
 }
