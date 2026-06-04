@@ -29,83 +29,27 @@ async function importEnvWithDailyLimit(value: string | undefined) {
 }
 
 function createMockTx(
-  scenario:
-    | "update-success"
-    | "create-success"
-    | "create-conflict-then-update"
-    | "limit-reached",
+  scenario: "upsert-returns-row" | "upsert-returns-empty",
 ) {
-  const updateMany = vi.fn();
-  const create = vi.fn();
-  const findUnique = vi.fn();
+  const queryRaw = vi.fn();
 
   const usageDate = new Date("2026-05-26T00:00:00.000Z");
   const userId = "3f7fb862-e9c6-4696-8b59-76fdf56d4975";
 
   switch (scenario) {
-    case "update-success":
-      updateMany.mockResolvedValue({ count: 1 });
-      findUnique.mockResolvedValue({
-        userId,
-        usageDate,
-        sentCount: 1,
-        dailyLimit: 2,
-      });
+    case "upsert-returns-row":
+      queryRaw.mockResolvedValue([
+        { userId, usageDate, sentCount: 1, dailyLimit: 2 },
+      ]);
       break;
 
-    case "create-success":
-      updateMany.mockResolvedValue({ count: 0 });
-      create.mockResolvedValue({
-        userId,
-        usageDate,
-        sentCount: 1,
-        dailyLimit: 2,
-        id: "ignored-uuid",
-        createdAt: usageDate,
-        updatedAt: usageDate,
-      });
-      break;
-
-    case "create-conflict-then-update":
-      updateMany
-        .mockResolvedValueOnce({ count: 0 })
-        .mockResolvedValueOnce({ count: 1 });
-      create.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError(
-          "Unique constraint failed on the fields: (`user_id`,`usage_date`)",
-          {
-            code: "P2002",
-            clientVersion: "7.8.0",
-          },
-        ),
-      );
-      findUnique.mockResolvedValue({
-        userId,
-        usageDate,
-        sentCount: 2,
-        dailyLimit: 2,
-      });
-      break;
-
-    case "limit-reached":
-      updateMany
-        .mockResolvedValueOnce({ count: 0 })
-        .mockResolvedValueOnce({ count: 0 });
-      create.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError(
-          "Unique constraint failed on the fields: (`user_id`,`usage_date`)",
-          {
-            code: "P2002",
-            clientVersion: "7.8.0",
-          },
-        ),
-      );
+    case "upsert-returns-empty":
+      queryRaw.mockResolvedValue([]);
       break;
   }
 
-  const dailyUsage = { updateMany, create, findUnique };
-  const tx = { dailyUsage } as unknown as Prisma.TransactionClient;
-  return { tx, dailyUsage };
+  const tx = { $queryRaw: queryRaw } as unknown as Prisma.TransactionClient;
+  return { tx, queryRaw };
 }
 
 describe("Rate limiting foundation", () => {
@@ -201,7 +145,7 @@ describe("Rate limiting foundation", () => {
       findCurrentUsage: vi.fn(),
     };
     const service = new RateLimitService(rateLimits, 2);
-    const { tx } = createMockTx("update-success");
+    const { tx } = createMockTx("upsert-returns-row");
 
     await service.reserveMessage(
       tx,
@@ -230,7 +174,7 @@ describe("Rate limiting foundation", () => {
       findCurrentUsage: vi.fn(),
     };
     const service = new RateLimitService(rateLimits, 4);
-    const { tx } = createMockTx("update-success");
+    const { tx } = createMockTx("upsert-returns-row");
 
     await service.reserveMessage(tx, "user-id");
 
@@ -271,7 +215,7 @@ describe("Rate limiting foundation", () => {
       findCurrentUsage: vi.fn(),
     };
     const service = new RateLimitService(rateLimits, 1);
-    const { tx } = createMockTx("update-success");
+    const { tx } = createMockTx("upsert-returns-row");
 
     await expect(
       service.reserveMessage(
@@ -288,7 +232,7 @@ describe("Rate limiting foundation", () => {
       findCurrentUsage: vi.fn(),
     };
     const service = new RateLimitService(rateLimits, 1);
-    const { tx } = createMockTx("update-success");
+    const { tx } = createMockTx("upsert-returns-row");
 
     await expect(
       service.reserveMessage(
@@ -302,13 +246,13 @@ describe("Rate limiting foundation", () => {
     });
   });
 
-  // ─── Phase 1 RED: scenario tests for Prisma-native reserveDailyQuota ───
+  // ─── Phase 2 RED/GREEN: scenario tests for $queryRaw-based reserveDailyQuota ───
 
-  it("reserves quota via updateMany when a row already exists below the limit", async () => {
+  it("$queryRaw returns a row → method returns DailyUsageSnapshot", async () => {
     const repository = new RateLimitRepository({} as never);
     const usageDate = new Date("2026-05-26T00:00:00.000Z");
     const userId = "3f7fb862-e9c6-4696-8b59-76fdf56d4975";
-    const { tx, dailyUsage } = createMockTx("update-success");
+    const { tx, queryRaw } = createMockTx("upsert-returns-row");
 
     const result = await repository.reserveDailyQuota({
       tx,
@@ -317,22 +261,19 @@ describe("Rate limiting foundation", () => {
       dailyLimit: 2,
     });
 
-    expect(dailyUsage.updateMany).toHaveBeenCalledWith({
-      where: { userId, usageDate, sentCount: { lt: 2 } },
-      data: { sentCount: { increment: 1 }, dailyLimit: 2 },
-    });
-    expect(dailyUsage.findUnique).toHaveBeenCalledWith({
-      where: { userId_usageDate: { userId, usageDate } },
-    });
-    expect(dailyUsage.create).not.toHaveBeenCalled();
+    expect(queryRaw).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ userId, usageDate, sentCount: 1, dailyLimit: 2 });
   });
 
-  it("creates a row and reserves one unit when no daily usage row exists", async () => {
+  it("$queryRaw returns another row → method returns updated DailyUsageSnapshot", async () => {
     const repository = new RateLimitRepository({} as never);
     const usageDate = new Date("2026-05-26T00:00:00.000Z");
     const userId = "3f7fb862-e9c6-4696-8b59-76fdf56d4975";
-    const { tx, dailyUsage } = createMockTx("create-success");
+
+    const queryRaw = vi.fn().mockResolvedValue([
+      { userId, usageDate, sentCount: 2, dailyLimit: 2 },
+    ]);
+    const tx = { $queryRaw: queryRaw } as unknown as Prisma.TransactionClient;
 
     const result = await repository.reserveDailyQuota({
       tx,
@@ -341,54 +282,15 @@ describe("Rate limiting foundation", () => {
       dailyLimit: 2,
     });
 
-    expect(dailyUsage.updateMany).toHaveBeenCalledWith({
-      where: { userId, usageDate, sentCount: { lt: 2 } },
-      data: { sentCount: { increment: 1 }, dailyLimit: 2 },
-    });
-    expect(dailyUsage.create).toHaveBeenCalledWith({
-      data: { userId, usageDate, sentCount: 1, dailyLimit: 2 },
-    });
-    expect(dailyUsage.findUnique).not.toHaveBeenCalled();
-    expect(result).toEqual({ userId, usageDate, sentCount: 1, dailyLimit: 2 });
-  });
-
-  it("retries via updateMany when create hits a unique constraint from a concurrent insert", async () => {
-    const repository = new RateLimitRepository({} as never);
-    const usageDate = new Date("2026-05-26T00:00:00.000Z");
-    const userId = "3f7fb862-e9c6-4696-8b59-76fdf56d4975";
-    const { tx, dailyUsage } = createMockTx("create-conflict-then-update");
-
-    const result = await repository.reserveDailyQuota({
-      tx,
-      userId,
-      usageDate,
-      dailyLimit: 2,
-    });
-
-    // First attempt
-    expect(dailyUsage.updateMany).toHaveBeenNthCalledWith(1, {
-      where: { userId, usageDate, sentCount: { lt: 2 } },
-      data: { sentCount: { increment: 1 }, dailyLimit: 2 },
-    });
-    expect(dailyUsage.create).toHaveBeenCalledWith({
-      data: { userId, usageDate, sentCount: 1, dailyLimit: 2 },
-    });
-    // Retry after P2002
-    expect(dailyUsage.updateMany).toHaveBeenNthCalledWith(2, {
-      where: { userId, usageDate, sentCount: { lt: 2 } },
-      data: { sentCount: { increment: 1 }, dailyLimit: 2 },
-    });
-    expect(dailyUsage.findUnique).toHaveBeenCalledWith({
-      where: { userId_usageDate: { userId, usageDate } },
-    });
+    expect(queryRaw).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ userId, usageDate, sentCount: 2, dailyLimit: 2 });
   });
 
-  it("returns null when the limit is reached even after an insert conflict retry", async () => {
+  it("$queryRaw returns [] → method returns null", async () => {
     const repository = new RateLimitRepository({} as never);
     const usageDate = new Date("2026-05-26T00:00:00.000Z");
     const userId = "3f7fb862-e9c6-4696-8b59-76fdf56d4975";
-    const { tx, dailyUsage } = createMockTx("limit-reached");
+    const { tx, queryRaw } = createMockTx("upsert-returns-empty");
 
     const result = await repository.reserveDailyQuota({
       tx,
@@ -397,8 +299,7 @@ describe("Rate limiting foundation", () => {
       dailyLimit: 2,
     });
 
-    expect(dailyUsage.updateMany).toHaveBeenCalledTimes(2);
-    expect(dailyUsage.create).toHaveBeenCalledTimes(1);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
     expect(result).toBeNull();
   });
 });

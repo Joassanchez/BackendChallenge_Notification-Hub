@@ -1,8 +1,10 @@
 import { config } from "dotenv";
 import { execSync } from "child_process";
 
-// Load .env.test with override before any Prisma command
-config({ path: ".env.test", override: true });
+// Load .env.test only for local execution; Docker injects DATABASE_URL via compose
+if (!process.env.DATABASE_URL) {
+  config({ path: ".env.test", quiet: true });
+}
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL is not set. Ensure .env.test exists with DATABASE_URL.");

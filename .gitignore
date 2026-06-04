@@ -5,6 +5,7 @@ dist/
 coverage/
 src/generated/prisma
 .atl/
+openspec
 .gitignore
 *docs
 coverage/
