@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Prisma } from "../src/generated/prisma/client.js";
-import { AppError, tooManyRequests } from "../src/shared/http/errors.js";
+import { Prisma } from "../../src/generated/prisma/client.js";
+import { AppError, tooManyRequests } from "../../src/shared/http/errors.js";
 import {
   RateLimitRepository,
   type DailyUsageSnapshot,
-} from "../src/modules/quota/rate-limiting/rate-limit.repository.js";
+} from "../../src/modules/quota/rate-limiting/rate-limit.repository.js";
 import {
   RateLimitService,
   toUtcUsageDate,
-} from "../src/modules/quota/rate-limiting/rate-limit.service.js";
+} from "../../src/modules/quota/rate-limiting/rate-limit.service.js";
 
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
@@ -25,7 +25,7 @@ async function importEnvWithDailyLimit(value: string | undefined) {
     process.env.DAILY_MESSAGE_LIMIT = value;
   }
 
-  return import("../src/shared/config/env.js");
+  return import("../../src/shared/config/env.js");
 }
 
 function createMockTx(

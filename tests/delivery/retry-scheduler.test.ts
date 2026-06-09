@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DeliveryStatus, ProviderCode } from "../src/generated/prisma/client.js";
+import { DeliveryStatus, ProviderCode } from "../../src/generated/prisma/client.js";
 import type {
   DeliveryExecutionRepository,
   ExecutableDelivery,
-} from "../src/modules/delivery/execution/delivery-execution.repository.js";
-import type { DeliveryExecutionService } from "../src/modules/delivery/execution/delivery-execution.service.js";
-import { RetryScheduler } from "../src/modules/delivery/retry/retry-scheduler.js";
+} from "../../src/modules/delivery/execution/delivery-execution.repository.js";
+import type { DeliveryExecutionService } from "../../src/modules/delivery/execution/delivery-execution.service.js";
+import { RetryScheduler } from "../../src/modules/delivery/retry/retry-scheduler.js";
 
 function buildMockDelivery(id: string): ExecutableDelivery {
   const createdAt = new Date("2026-01-01T00:00:00.000Z");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RETRY_POLICY, computeNextRetryAt, canRetry } from "../src/modules/delivery/retry/retry-policy.js";
+import { RETRY_POLICY, computeNextRetryAt, canRetry } from "../../src/modules/delivery/retry/retry-policy.js";
 
 describe("retry-policy", () => {
   describe("RETRY_POLICY constants", () => {

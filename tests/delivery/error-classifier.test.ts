@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { classifyError } from "../src/modules/delivery/retry/error-classifier.js";
-import type { DeliveryProviderResult } from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
+import { classifyError } from "../../src/modules/delivery/retry/error-classifier.js";
+import type { DeliveryProviderResult } from "../../src/modules/delivery/adapters/delivery-provider-adapter.js";
 
 describe("error-classifier", () => {
   describe("classifyError", () => {

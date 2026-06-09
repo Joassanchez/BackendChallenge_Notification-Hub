@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ProviderCode } from "../src/generated/prisma/client.js";
+import { ProviderCode } from "../../src/generated/prisma/client.js";
 import {
   createTargetBodySchema,
   updateTargetBodySchema,
   targetIdParamsSchema,
-} from "../src/modules/notifications/notification-targets/notification-target.schemas.js";
+} from "../../src/modules/notifications/notification-targets/notification-target.schemas.js";
 
 // --- createTargetBodySchema ---
 

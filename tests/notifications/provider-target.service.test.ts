@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { ProviderCode, type Prisma } from "../src/generated/prisma/client.js";
-import type { NotificationTargetRepository, NotificationTargetWithProvider } from "../src/modules/notifications/notification-targets/notification-target.repository.js";
-import { NotificationTargetService } from "../src/modules/notifications/notification-targets/notification-target.service.js";
-import type { ProviderConnectionRepository, ProviderConnectionWithProvider } from "../src/modules/delivery/provider-connections/provider-connection.repository.js";
-import { ProviderConnectionService } from "../src/modules/delivery/provider-connections/provider-connection.service.js";
-import type { ProviderRepository } from "../src/modules/delivery/providers/provider.repository.js";
-import { ProviderService } from "../src/modules/delivery/providers/provider.service.js";
-import { expectAppError, telegramTargetId } from "./helpers/service-fixtures.js";
+import { ProviderCode, type Prisma } from "../../src/generated/prisma/client.js";
+import type { NotificationTargetRepository, NotificationTargetWithProvider } from "../../src/modules/notifications/notification-targets/notification-target.repository.js";
+import { NotificationTargetService } from "../../src/modules/notifications/notification-targets/notification-target.service.js";
+import type { ProviderConnectionRepository, ProviderConnectionWithProvider } from "../../src/modules/delivery/provider-connections/provider-connection.repository.js";
+import { ProviderConnectionService } from "../../src/modules/delivery/provider-connections/provider-connection.service.js";
+import type { ProviderRepository } from "../../src/modules/delivery/providers/provider.repository.js";
+import { ProviderService } from "../../src/modules/delivery/providers/provider.service.js";
+import { expectAppError, telegramTargetId } from "../helpers/service-fixtures.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const providerId = "77777777-7777-4777-8777-777777777777";

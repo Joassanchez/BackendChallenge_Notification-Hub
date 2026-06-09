@@ -1,17 +1,17 @@
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { AttemptStatus, DeliveryStatus, Prisma, PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
-import type { DeliveryProviderAdapter, DeliveryProviderResult } from "../src/modules/delivery/adapters/delivery-provider-adapter.js";
-import { RETRY_POLICY } from "../src/modules/delivery/retry/retry-policy.js";
-import { cleanTransactionalData } from "./helpers/db-cleanup.js";
+import { AttemptStatus, DeliveryStatus, Prisma, PrismaClient, ProviderCode, RoleCode } from "../../src/generated/prisma/client.js";
+import type { DeliveryProviderAdapter, DeliveryProviderResult } from "../../src/modules/delivery/adapters/delivery-provider-adapter.js";
+import { RETRY_POLICY } from "../../src/modules/delivery/retry/retry-policy.js";
+import { cleanTransactionalData } from "../helpers/db-cleanup.js";
 
 process.env.JWT_SECRET = "retry_test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3002";
 
-const { createApp } = await import("../src/app.js");
-const { prisma: appPrisma } = await import("../src/shared/database/prisma.js");
+const { createApp } = await import("../../src/app.js");
+const { prisma: appPrisma } = await import("../../src/shared/database/prisma.js");
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),

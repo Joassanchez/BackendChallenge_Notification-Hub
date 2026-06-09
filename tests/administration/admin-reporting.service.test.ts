@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { DeliveryStatus, MessageStatus, ProviderCode, type Prisma } from "../src/generated/prisma/client.js";
+import { DeliveryStatus, MessageStatus, ProviderCode, type Prisma } from "../../src/generated/prisma/client.js";
 import type {
   AdminMetricsDailyUsage,
   AdminMetricsRepository,
   AdminMetricsUser,
-} from "../src/modules/administration/metrics/admin-metrics.repository.js";
-import { AdminMetricsService } from "../src/modules/administration/metrics/admin-metrics.service.js";
+} from "../../src/modules/administration/metrics/admin-metrics.repository.js";
+import { AdminMetricsService } from "../../src/modules/administration/metrics/admin-metrics.service.js";
 import type {
   AdminReportingMessage,
   AdminReportingRepository,
-} from "../src/modules/administration/reporting/admin-reporting.repository.js";
-import { AdminReportingService } from "../src/modules/administration/reporting/admin-reporting.service.js";
+} from "../../src/modules/administration/reporting/admin-reporting.repository.js";
+import { AdminReportingService } from "../../src/modules/administration/reporting/admin-reporting.service.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const otherUserId = "22222222-2222-4222-8222-222222222222";

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { Prisma } from "../src/generated/prisma/client.js";
-import { AuthService } from "../src/modules/identity/auth/auth.service.js";
-import type { PasswordService } from "../src/modules/identity/auth/password.service.js";
-import type { TokenService } from "../src/modules/identity/auth/token.service.js";
-import type { UserRepository } from "../src/modules/identity/users/user-repository.js";
-import type { UserWithRoles } from "../src/modules/identity/users/user-mapper.js";
-import { buildUserWithRoles, expectAppError, userId } from "./helpers/service-fixtures.js";
+import { Prisma } from "../../src/generated/prisma/client.js";
+import { AuthService } from "../../src/modules/identity/auth/auth.service.js";
+import type { PasswordService } from "../../src/modules/identity/auth/password.service.js";
+import type { TokenService } from "../../src/modules/identity/auth/token.service.js";
+import type { UserRepository } from "../../src/modules/identity/users/user-repository.js";
+import type { UserWithRoles } from "../../src/modules/identity/users/user-mapper.js";
+import { buildUserWithRoles, expectAppError, userId } from "../helpers/service-fixtures.js";
 
 type CreateUserInput = Parameters<UserRepository["createWithDefaultRole"]>[0];
 

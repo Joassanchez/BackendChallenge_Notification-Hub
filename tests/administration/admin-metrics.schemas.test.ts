@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
-import { getMetricsQuerySchema } from "../src/modules/administration/metrics/admin-metrics.schemas.js";
+import { getMetricsQuerySchema } from "../../src/modules/administration/metrics/admin-metrics.schemas.js";
 
 describe("getMetricsQuerySchema", () => {
   it("accepts empty query object", () => {

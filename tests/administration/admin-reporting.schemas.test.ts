@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MessageStatus, ProviderCode } from "../src/generated/prisma/client.js";
-import { listMessagesQuerySchema } from "../src/modules/administration/reporting/admin-reporting.schemas.js";
+import { MessageStatus, ProviderCode } from "../../src/generated/prisma/client.js";
+import { listMessagesQuerySchema } from "../../src/modules/administration/reporting/admin-reporting.schemas.js";
 
 describe("listMessagesQuerySchema", () => {
   it("accepts empty query object", () => {

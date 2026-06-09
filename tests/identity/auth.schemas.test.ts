@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 // Import schemas — they do NOT exist yet, this is the RED step
-import { registerBodySchema, loginBodySchema } from "../src/modules/identity/auth/auth.schemas.js";
+import { registerBodySchema, loginBodySchema } from "../../src/modules/identity/auth/auth.schemas.js";
 
 describe("registerBodySchema", () => {
   it("accepts valid registration with just username and password", () => {

@@ -2,15 +2,15 @@ import bcrypt from "bcrypt";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, ProviderCode, RoleCode } from "../src/generated/prisma/client.js";
-import { cleanTransactionalData } from "./helpers/db-cleanup.js";
+import { PrismaClient, ProviderCode, RoleCode } from "../../src/generated/prisma/client.js";
+import { cleanTransactionalData } from "../helpers/db-cleanup.js";
 
 process.env.JWT_SECRET = "test_jwt_secret";
 process.env.JWT_EXPIRES_IN = "1d";
 process.env.PORT = "3001";
 
-const { createApp } = await import("../src/app.js");
-const { prisma: appPrisma } = await import("../src/shared/database/prisma.js");
+const { createApp } = await import("../../src/app.js");
+const { prisma: appPrisma } = await import("../../src/shared/database/prisma.js");
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),

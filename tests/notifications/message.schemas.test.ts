@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MessageStatus, ProviderCode } from "../src/generated/prisma/client.js";
+import { MessageStatus, ProviderCode } from "../../src/generated/prisma/client.js";
 import {
   createMessageBodySchema,
   listMessagesQuerySchema,
   messageIdParamsSchema,
   idempotencyKeyHeaderSchema,
-} from "../src/modules/notifications/messages/message.schemas.js";
+} from "../../src/modules/notifications/messages/message.schemas.js";
 
 // --- createMessageBodySchema ---
 

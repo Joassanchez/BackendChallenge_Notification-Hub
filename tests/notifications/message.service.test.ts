@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { MessageStatus, ProviderCode } from "../src/generated/prisma/client.js";
-import { MessageService } from "../src/modules/notifications/messages/message.service.js";
-import type { MessageRepository, MessageWithDeliveries } from "../src/modules/notifications/messages/message-repository.js";
-import type { DeliveryExecutionService } from "../src/modules/delivery/execution/delivery-execution.service.js";
+import { MessageStatus, ProviderCode } from "../../src/generated/prisma/client.js";
+import { MessageService } from "../../src/modules/notifications/messages/message.service.js";
+import type { MessageRepository, MessageWithDeliveries } from "../../src/modules/notifications/messages/message-repository.js";
+import type { DeliveryExecutionService } from "../../src/modules/delivery/execution/delivery-execution.service.js";
 import {
   buildDelivery,
   buildMessageWithDeliveries,
@@ -13,7 +13,7 @@ import {
   telegramDestination,
   telegramTargetId,
   userId,
-} from "./helpers/service-fixtures.js";
+} from "../helpers/service-fixtures.js";
 
 function createRepository(input: {
   existingByIdempotencyKey?: MessageWithDeliveries | null;
