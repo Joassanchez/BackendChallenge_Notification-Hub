@@ -6,6 +6,7 @@ import type {
   CompleteDeliveryInput,
   DeliveryExecutionRepository,
   ExecutableDelivery,
+  MarkRetryingInput,
 } from "../src/modules/delivery/execution/delivery-execution.repository.js";
 import type {
   DeliveryProviderAdapter,
@@ -90,12 +91,22 @@ function createService(input: {
   adapters?: DeliveryProviderRegistry;
 } = {}) {
   const completed: CompleteDeliveryInput[] = [];
+  const retried: MarkRetryingInput[] = [];
+  const defaultDelivery = input.deliveries?.[0] ?? buildExecutableDelivery();
   const deliveries = {
-    findPendingDeliveriesForMessage: vi.fn(async () => input.deliveries ?? [buildExecutableDelivery()]),
+    findPendingDeliveriesForMessage: vi.fn(async () => input.deliveries ?? [defaultDelivery]),
     markProcessing: vi.fn(async () => undefined),
     completeDelivery: vi.fn(async (payload: CompleteDeliveryInput) => {
       completed.push(payload);
       return undefined;
+    }),
+    markRetrying: vi.fn(async (payload: MarkRetryingInput) => {
+      retried.push(payload);
+      return undefined;
+    }),
+    fetchDeliveryForRetry: vi.fn(async (deliveryId: string) => {
+      const found = (input.deliveries ?? [defaultDelivery]).find((d) => d.id === deliveryId) ?? defaultDelivery;
+      return found;
     }),
   };
   const configResolver = {
@@ -120,6 +131,7 @@ function createService(input: {
     deliveries,
     configResolver,
     completed,
+    retried,
   };
 }
 
@@ -207,59 +219,109 @@ describe("DeliveryExecutionService", () => {
     ]);
   });
 
-  it.each([
-    [
-      "failed",
-      { kind: "failed", errorCode: "INVALID_TARGET", errorMessage: "Invalid target", providerResponse: { reason: "bad target" } },
-      {
-        status: AttemptStatus.failed,
-        providerResponse: { reason: "bad target" },
-        errorCode: "INVALID_TARGET",
-        errorMessage: "Invalid target",
-      },
-    ],
-    [
-      "timeout",
-      { kind: "timeout", errorCode: "PROVIDER_TIMEOUT", errorMessage: "Provider request timed out" },
-      {
-        status: AttemptStatus.timeout,
-        errorCode: "PROVIDER_TIMEOUT",
-        errorMessage: "Provider request timed out",
-      },
-    ],
-    [
-      "provider_error",
-      {
-        kind: "provider_error",
-        httpStatusCode: 503,
-        errorCode: "TELEGRAM_503",
-        errorMessage: "telegram provider returned 503",
-        providerResponse: { error: "unavailable" },
-      },
-      {
-        status: AttemptStatus.provider_error,
-        httpStatusCode: 503,
-        providerResponse: { error: "unavailable" },
-        errorCode: "TELEGRAM_503",
-        errorMessage: "telegram provider returned 503",
-      },
-    ],
-  ] satisfies Array<[string, DeliveryProviderResult, CompleteDeliveryInput["attempt"]]>)(
-    "maps %s adapter outcomes to failed delivery attempts",
-    async (_name, result, expectedAttempt) => {
-      const { service, completed } = createService({ adapters: { [ProviderCode.telegram]: adapterReturning(result) } });
+  it("maps failed adapter outcomes to failed delivery attempts (permanent)", async () => {
+    const result: DeliveryProviderResult = {
+      kind: "failed",
+      errorCode: "INVALID_TARGET",
+      errorMessage: "Invalid target",
+      providerResponse: { reason: "bad target" },
+    };
+    const { service, completed } = createService({ adapters: { [ProviderCode.telegram]: adapterReturning(result) } });
 
-      await service.executeMessage(messageId);
+    await service.executeMessage(messageId);
 
-      expect(completed).toEqual([
-        {
-          deliveryId,
-          deliveryStatus: DeliveryStatus.failed,
-          attempt: expectedAttempt,
+    expect(completed).toEqual([
+      {
+        deliveryId,
+        deliveryStatus: DeliveryStatus.failed,
+        attempt: {
+          status: AttemptStatus.failed,
+          providerResponse: { reason: "bad target" },
+          errorCode: "INVALID_TARGET",
+          errorMessage: "Invalid target",
         },
-      ]);
-    },
-  );
+      },
+    ]);
+  });
+
+  it("maps timeout adapter outcomes to retrying (retryable)", async () => {
+    const result: DeliveryProviderResult = {
+      kind: "timeout",
+      errorCode: "PROVIDER_TIMEOUT",
+      errorMessage: "Provider request timed out",
+    };
+    const { service, completed, retried } = createService({ adapters: { [ProviderCode.telegram]: adapterReturning(result) } });
+
+    await service.executeMessage(messageId);
+
+    expect(completed).toEqual([]);
+    expect(retried).toEqual([
+      {
+        deliveryId,
+        attempt: {
+          status: AttemptStatus.timeout,
+          errorCode: "PROVIDER_TIMEOUT",
+          errorMessage: "Provider request timed out",
+        },
+        nextRetryAt: expect.any(Date) as Date,
+      },
+    ]);
+  });
+
+  it("maps provider_error(5xx) adapter outcomes to retrying (retryable)", async () => {
+    const result: DeliveryProviderResult = {
+      kind: "provider_error",
+      httpStatusCode: 503,
+      errorCode: "TELEGRAM_503",
+      errorMessage: "telegram provider returned 503",
+      providerResponse: { error: "unavailable" },
+    };
+    const { service, completed, retried } = createService({ adapters: { [ProviderCode.telegram]: adapterReturning(result) } });
+
+    await service.executeMessage(messageId);
+
+    expect(completed).toEqual([]);
+    expect(retried).toEqual([
+      {
+        deliveryId,
+        attempt: {
+          status: AttemptStatus.provider_error,
+          httpStatusCode: 503,
+          providerResponse: { error: "unavailable" },
+          errorCode: "TELEGRAM_503",
+          errorMessage: "telegram provider returned 503",
+        },
+        nextRetryAt: expect.any(Date) as Date,
+      },
+    ]);
+  });
+
+  it("maps provider_error(4xx) adapter outcomes to failed (permanent)", async () => {
+    const result: DeliveryProviderResult = {
+      kind: "provider_error",
+      httpStatusCode: 400,
+      errorCode: "TELEGRAM_400",
+      errorMessage: "telegram provider returned 400",
+      providerResponse: { error: "bad_request" },
+    };
+    const { service, completed } = createService({ adapters: { [ProviderCode.telegram]: adapterReturning(result) } });
+
+    await service.executeMessage(messageId);
+
+    expect(completed).toEqual([
+      {
+        deliveryId,
+        deliveryStatus: DeliveryStatus.failed,
+        attempt: {
+          status: AttemptStatus.provider_error,
+          httpStatusCode: 400,
+          providerResponse: { error: "bad_request" },
+          errorCode: "TELEGRAM_400",
+          errorMessage: "telegram provider returned 400",
+        },
+      },
+    ]);
+  });
 
   it("redacts resolved secrets from adapter results and thrown adapter errors", async () => {
     const secret = "resolved-secret";
@@ -282,7 +344,7 @@ describe("DeliveryExecutionService", () => {
       buildExecutableDelivery(),
       buildExecutableDelivery({ providerCode: ProviderCode.discord }),
     ];
-    const { service, completed } = createService({
+    const { service, retried } = createService({
       deliveries,
       adapters: {
         [ProviderCode.telegram]: providerErrorAdapter,
@@ -292,8 +354,8 @@ describe("DeliveryExecutionService", () => {
 
     await service.executeMessage(messageId);
 
-    expect(JSON.stringify(completed)).not.toContain(secret);
-    expect(completed).toEqual([
+    expect(JSON.stringify(retried)).not.toContain(secret);
+    expect(retried).toEqual([
       expect.objectContaining({
         attempt: expect.objectContaining({
           status: AttemptStatus.provider_error,

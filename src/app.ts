@@ -16,6 +16,8 @@ import { DeliveryExecutionRepository } from "./modules/delivery/execution/delive
 import { DeliveryExecutionService } from "./modules/delivery/execution/delivery-execution.service.js";
 import type { DeliveryProviderRegistry } from "./modules/delivery/adapters/delivery-provider-adapter.js";
 import { createProductionDeliveryProviderRegistry } from "./modules/delivery/adapters/provider-adapters.js";
+import { RetryScheduler } from "./modules/delivery/retry/retry-scheduler.js";
+import { recoverStaleProcessing } from "./modules/delivery/retry/stale-recovery.js";
 import { MessageRepository } from "./modules/notifications/messages/message-repository.js";
 import { createMessageRouter } from "./modules/notifications/messages/message.routes.js";
 import { MessageService } from "./modules/notifications/messages/message.service.js";
@@ -49,8 +51,9 @@ export function createApp(dependencies: AppDependencies = {}) {
   const tokenService = new TokenService();
   const authService = new AuthService(userRepository, new PasswordService(), tokenService);
   const authenticate = createAuthenticateMiddleware(tokenService, userRepository);
+  const deliveryExecutionRepository = new DeliveryExecutionRepository(prisma);
   const deliveryExecutionService = new DeliveryExecutionService(
-    new DeliveryExecutionRepository(prisma),
+    deliveryExecutionRepository,
     new DeliveryConfigResolver(),
     dependencies.deliveryAdapters ?? createProductionDeliveryProviderRegistry(),
   );
@@ -61,6 +64,22 @@ export function createApp(dependencies: AppDependencies = {}) {
   const messageService = new MessageService(new MessageRepository(prisma), deliveryExecutionService, rateLimitService);
   const adminReportingService = new AdminReportingService(new AdminReportingRepository(prisma));
   const adminMetricsService = new AdminMetricsService(new AdminMetricsRepository(prisma), env.DAILY_MESSAGE_LIMIT);
+
+  // Startup: recover stale processing deliveries, then start retry scheduler
+  const scheduler = new RetryScheduler(deliveryExecutionRepository, deliveryExecutionService);
+
+  void recoverStaleProcessing(deliveryExecutionRepository).then((count) => {
+    if (count > 0) {
+      console.log(`[RetryScheduler] Recovered ${count} stale processing deliveries`);
+    }
+    scheduler.start();
+  }).catch((error) => {
+    console.error("[RetryScheduler] Stale recovery failed, starting scheduler anyway:", error);
+    scheduler.start();
+  });
+
+  // Store scheduler for graceful shutdown
+  (app as unknown as Record<string, unknown>).locals = { ...app.locals, scheduler };
 
   app.use(express.json());
 

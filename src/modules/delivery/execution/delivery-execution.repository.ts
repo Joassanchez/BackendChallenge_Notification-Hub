@@ -7,6 +7,16 @@ import {
   type ProviderCode,
 } from "../../../generated/prisma/client.js";
 
+const deliveryWithIncludes = {
+  message: true,
+  provider: true,
+  target: {
+    include: {
+      providerConnection: true,
+    },
+  },
+} as const;
+
 const executableDeliveryInclude = {
   message: true,
   provider: true,
@@ -34,6 +44,12 @@ export type CompleteDeliveryInput = {
   deliveryId: string;
   deliveryStatus: typeof DeliveryStatus.success | typeof DeliveryStatus.failed;
   attempt: DeliveryAttemptWrite;
+};
+
+export type MarkRetryingInput = {
+  deliveryId: string;
+  attempt: DeliveryAttemptWrite;
+  nextRetryAt: Date;
 };
 
 export class DeliveryExecutionRepository {
@@ -112,6 +128,116 @@ export class DeliveryExecutionRepository {
           status: aggregateStatus,
         },
       });
+    });
+  }
+
+  markRetrying(input: MarkRetryingInput) {
+    return this.db.$transaction(async (transaction) => {
+      const delivery = await transaction.messageDelivery.findUniqueOrThrow({
+        where: {
+          id: input.deliveryId,
+        },
+        select: {
+          messageId: true,
+          attemptCount: true,
+        },
+      });
+
+      await transaction.deliveryAttempt.create({
+        data: {
+          deliveryId: input.deliveryId,
+          attemptNumber: delivery.attemptCount + 1,
+          status: input.attempt.status,
+          httpStatusCode: input.attempt.httpStatusCode ?? null,
+          providerMessageId: input.attempt.providerMessageId ?? null,
+          providerResponse: input.attempt.providerResponse ?? Prisma.JsonNull,
+          errorCode: input.attempt.errorCode ?? null,
+          errorMessage: input.attempt.errorMessage ?? null,
+        },
+      });
+
+      await transaction.messageDelivery.update({
+        where: {
+          id: input.deliveryId,
+        },
+        data: {
+          status: DeliveryStatus.retrying,
+          attemptCount: {
+            increment: 1,
+          },
+          nextRetryAt: input.nextRetryAt,
+          sentAt: null,
+        },
+      });
+
+      const aggregateStatus = await calculateMessageStatus(transaction, delivery.messageId);
+
+      return transaction.message.update({
+        where: {
+          id: delivery.messageId,
+        },
+        data: {
+          status: aggregateStatus,
+        },
+      });
+    });
+  }
+
+  async claimRetry(deliveryId: string): Promise<ExecutableDelivery | null> {
+    const result = await this.db.messageDelivery.updateMany({
+      where: {
+        id: deliveryId,
+        status: DeliveryStatus.retrying,
+        nextRetryAt: { lte: new Date() },
+      },
+      data: {
+        status: DeliveryStatus.processing,
+      },
+    });
+
+    if (result.count === 0) {
+      return null;
+    }
+
+    return this.db.messageDelivery.findUniqueOrThrow({
+      where: { id: deliveryId },
+      include: executableDeliveryInclude,
+    });
+  }
+
+  findDueRetries() {
+    return this.db.messageDelivery.findMany({
+      where: {
+        status: DeliveryStatus.retrying,
+        nextRetryAt: { lte: new Date() },
+      },
+      select: {
+        id: true,
+      },
+      orderBy: {
+        nextRetryAt: "asc",
+      },
+    });
+  }
+
+  resetStaleProcessing(thresholdMs: number) {
+    const cutoff = new Date(Date.now() - thresholdMs);
+    return this.db.messageDelivery.updateMany({
+      where: {
+        status: DeliveryStatus.processing,
+        updatedAt: { lt: cutoff },
+      },
+      data: {
+        status: DeliveryStatus.retrying,
+        nextRetryAt: new Date(),
+      },
+    });
+  }
+
+  fetchDeliveryForRetry(deliveryId: string) {
+    return this.db.messageDelivery.findUniqueOrThrow({
+      where: { id: deliveryId },
+      include: executableDeliveryInclude,
     });
   }
 }

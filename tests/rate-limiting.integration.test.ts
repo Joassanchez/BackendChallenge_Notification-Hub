@@ -273,9 +273,9 @@ describe("Rate limiting message quota integration", () => {
       failingProviderApp,
     ).expect(201);
 
-    expect(response.body).toMatchObject({ content: "Provider will fail", status: "failed" });
+    expect(response.body).toMatchObject({ content: "Provider will fail", status: "pending" });
     expect(response.body.deliveries).toEqual([
-      expect.objectContaining({ provider: "telegram", targetId: target.id, status: "failed" }),
+      expect.objectContaining({ provider: "telegram", targetId: target.id, status: "retrying" }),
     ]);
     await expect(findUsage(user.id)).resolves.toMatchObject({ sentCount: 1, dailyLimit: 2 });
   });

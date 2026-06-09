@@ -245,7 +245,9 @@ describe("Delivery Execution", () => {
       ],
     }).expect(201);
 
-    expect(response.body.status).toBe("failed");
+    // missingSecret is permanent → failed. 5xx/timeout/throw are retryable → retrying.
+    // Since at least one delivery is in retrying (non-terminal), Message.status stays pending.
+    expect(response.body.status).toBe("pending");
 
     const attempts = await attemptsForMessage(response.body.messageId as string);
     expect(attempts.map((attempt) => attempt.status).sort()).toEqual([
@@ -255,7 +257,12 @@ describe("Delivery Execution", () => {
       AttemptStatus.timeout,
     ].sort());
     expect(JSON.stringify(attempts)).not.toContain(process.env[throwSecretRef]);
-    expect(attempts.every((attempt) => attempt.delivery.status === DeliveryStatus.failed)).toBe(true);
+
+    // One delivery is failed (permanent), three are retrying
+    const failedDeliveries = attempts.filter((a) => a.delivery.status === DeliveryStatus.failed);
+    const retryingDeliveries = attempts.filter((a) => a.delivery.status === DeliveryStatus.retrying);
+    expect(failedDeliveries).toHaveLength(1); // missingSecret
+    expect(retryingDeliveries).toHaveLength(3); // 502, timeout, throw
     expect(attempts.every((attempt) => attempt.delivery.status !== DeliveryStatus.processing)).toBe(true);
   });
 

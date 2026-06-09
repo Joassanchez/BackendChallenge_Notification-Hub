@@ -1,8 +1,10 @@
 import { AttemptStatus, DeliveryStatus, Prisma } from "../../../generated/prisma/client.js";
 import type { DeliveryConfigResolver } from "./delivery-config-resolver.js";
-import type { DeliveryExecutionRepository, DeliveryAttemptWrite, ExecutableDelivery } from "./delivery-execution.repository.js";
+import type { DeliveryExecutionRepository, DeliveryAttemptWrite, ExecutableDelivery, MarkRetryingInput } from "./delivery-execution.repository.js";
 import type { DeliveryProviderInput, DeliveryProviderRegistry, DeliveryProviderResult } from "../adapters/delivery-provider-adapter.js";
 import { redactResolvedSecretFromProviderResponse, redactResolvedSecretFromString } from "../adapters/delivery-provider-adapter.js";
+import { classifyError } from "../retry/error-classifier.js";
+import { canRetry, computeNextRetryAt } from "../retry/retry-policy.js";
 
 export class DeliveryExecutionService {
   constructor(
@@ -19,8 +21,10 @@ export class DeliveryExecutionService {
     }
   }
 
-  private async executeDelivery(delivery: ExecutableDelivery): Promise<void> {
-    await this.deliveries.markProcessing(delivery.id);
+  async executeDelivery(delivery: ExecutableDelivery, skipMarkProcessing = false): Promise<void> {
+    if (!skipMarkProcessing) {
+      await this.deliveries.markProcessing(delivery.id);
+    }
 
     const inputOrFailure = this.buildInput(delivery);
 
@@ -46,11 +50,32 @@ export class DeliveryExecutionService {
 
     const result = await callAdapterSafely(() => adapter.send(inputOrFailure.input), inputOrFailure.input.resolvedSecret);
 
-    await this.deliveries.completeDelivery({
-      deliveryId: delivery.id,
-      deliveryStatus: result.kind === "success" ? DeliveryStatus.success : DeliveryStatus.failed,
-      attempt: toAttemptWrite(result, inputOrFailure.input.resolvedSecret),
-    });
+    if (result.kind === "success") {
+      await this.deliveries.completeDelivery({
+        deliveryId: delivery.id,
+        deliveryStatus: DeliveryStatus.success,
+        attempt: toAttemptWrite(result, inputOrFailure.input.resolvedSecret),
+      });
+      return;
+    }
+
+    const deliveryAfterBuild = await this.deliveries.fetchDeliveryForRetry(delivery.id);
+    const nextAttemptCount = deliveryAfterBuild.attemptCount + 1;
+    const classification = classifyError(result);
+
+    if (classification === "retryable" && canRetry(nextAttemptCount)) {
+      await this.deliveries.markRetrying({
+        deliveryId: delivery.id,
+        attempt: toAttemptWrite(result, inputOrFailure.input.resolvedSecret),
+        nextRetryAt: computeNextRetryAt(nextAttemptCount),
+      });
+    } else {
+      await this.deliveries.completeDelivery({
+        deliveryId: delivery.id,
+        deliveryStatus: DeliveryStatus.failed,
+        attempt: toAttemptWrite(result, inputOrFailure.input.resolvedSecret),
+      });
+    }
   }
 
   private buildInput(delivery: ExecutableDelivery): DeliveryInputBuildResult {
