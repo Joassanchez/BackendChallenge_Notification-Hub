@@ -17,6 +17,30 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build: .
+    container_name: notification_hub_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://notification_user:notification_password@postgres:5432/notification_hub_db?schema=public
+      PORT: "3000"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required in .env file}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      DAILY_MESSAGE_LIMIT: ${DAILY_MESSAGE_LIMIT:-100}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   test-coverage:
     image: node:24-bookworm
     working_dir: /app

@@ -17,37 +17,46 @@ async function main() {
       throw new Error("Providers telegram/discord are missing. Run seed first.");
     }
 
-    await prisma.providerConnection.deleteMany({
-      where: {
-        providerId: {
-          in: [telegram.id, discord.id],
-        },
-      },
+    // Idempotent: only create if the connection doesn't already exist.
+    // This is safe to run on every startup alongside the seed.
+
+    const existingTelegram = await prisma.providerConnection.findFirst({
+      where: { providerId: telegram.id, name: "local_telegram_main" },
     });
 
-    await prisma.providerConnection.create({
-      data: {
-        providerId: telegram.id,
-        name: "local_telegram_main",
-        authType: "bot-token",
-        secretRef: "TELEGRAM_BOT_TOKEN",
-        config: Prisma.JsonNull,
-        isActive: true,
-      },
+    if (!existingTelegram) {
+      await prisma.providerConnection.create({
+        data: {
+          providerId: telegram.id,
+          name: "local_telegram_main",
+          authType: "bot-token",
+          secretRef: "TELEGRAM_BOT_TOKEN",
+          config: Prisma.JsonNull,
+          isActive: true,
+        },
+      });
+      console.log("Created Telegram provider connection");
+    }
+
+    const existingDiscord = await prisma.providerConnection.findFirst({
+      where: { providerId: discord.id, name: "local_discord_main" },
     });
 
-    await prisma.providerConnection.create({
-      data: {
-        providerId: discord.id,
-        name: "local_discord_main",
-        authType: "webhook",
-        secretRef: null,
-        config: {
-          webhookUrl: process.env.DISCORD_WEBHOOK_URL ?? "",
+    if (!existingDiscord) {
+      await prisma.providerConnection.create({
+        data: {
+          providerId: discord.id,
+          name: "local_discord_main",
+          authType: "webhook",
+          secretRef: null,
+          config: {
+            webhookUrl: process.env.DISCORD_WEBHOOK_URL ?? "",
+          },
+          isActive: true,
         },
-        isActive: true,
-      },
-    });
+      });
+      console.log("Created Discord provider connection");
+    }
 
     const connections = await prisma.providerConnection.findMany({
       where: {

@@ -68,7 +68,7 @@ async function main() {
   console.log("Seed completed");
   console.log({
     adminUsername: admin.username,
-    adminPassword: "Admin123!",
+    adminPasswordSet: true,
     roles: [userRole.code, adminRole.code],
     providers: [ProviderCode.telegram, ProviderCode.discord],
   });
