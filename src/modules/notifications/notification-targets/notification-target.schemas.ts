@@ -5,9 +5,9 @@ import { ProviderCode } from "../../../generated/prisma/client.js";
 
 const PROVIDER_CODE_VALUES: string[] = Object.values(ProviderCode);
 
-const allowedTargetTypes: Readonly<Record<string, string>> = {
-  [ProviderCode.telegram]: "chat",
-  [ProviderCode.discord]: "webhook",
+const allowedTargetTypes: Readonly<Record<string, string[]>> = {
+  [ProviderCode.telegram]: ["chat"],
+  [ProviderCode.discord]: ["webhook", "channel"],
 };
 
 function isProviderCode(value: string): boolean {
@@ -19,7 +19,7 @@ function validateProviderTargetType(provider: string, targetType: string): boole
     return false;
   }
 
-  return allowedTargetTypes[provider] === targetType;
+  return allowedTargetTypes[provider].includes(targetType);
 }
 
 const updateAllowedKeys = ["displayName", "metadata"];

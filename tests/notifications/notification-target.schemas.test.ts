@@ -103,6 +103,26 @@ describe("createTargetBodySchema", () => {
     }
   });
 
+  it("accepts discord with targetType 'channel'", () => {
+    const body = {
+      provider: ProviderCode.discord,
+      targetType: "channel",
+      externalTargetId: "channel-456",
+    };
+    const result = createTargetBodySchema.safeParse(body);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts discord with targetType 'webhook'", () => {
+    const body = {
+      provider: ProviderCode.discord,
+      targetType: "webhook",
+      externalTargetId: "webhook-789",
+    };
+    const result = createTargetBodySchema.safeParse(body);
+    expect(result.success).toBe(true);
+  });
+
   it("rejects unsupported provider ↔ targetType combination", () => {
     const body = {
       provider: ProviderCode.discord,

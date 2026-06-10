@@ -264,6 +264,29 @@ describe("Providers and notification targets foundation", () => {
       .expect(409);
   });
 
+  it("accepts discord channel targetType alongside webhook", async () => {
+    const { token } = await createUserAndLogin();
+    await createConnection(ProviderCode.discord, { secretRef: "DISCORD_BOT_TOKEN" });
+
+    const created = await request(app)
+      .post("/notification-targets")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        provider: "discord",
+        externalTargetId: "discord-channel-1",
+        targetType: "channel",
+        displayName: "General channel",
+      })
+      .expect(201);
+
+    expect(created.body).toMatchObject({
+      provider: "discord",
+      externalTargetId: "discord-channel-1",
+      targetType: "channel",
+      displayName: "General channel",
+    });
+  });
+
   it("rejects zero and multiple active connection resolution", async () => {
     const { token } = await createUserAndLogin();
 
