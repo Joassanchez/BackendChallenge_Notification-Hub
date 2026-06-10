@@ -34,19 +34,38 @@ class TelegramDeliveryProviderAdapter implements DeliveryProviderAdapter {
 
 class DiscordDeliveryProviderAdapter implements DeliveryProviderAdapter {
   async send(input: DeliveryProviderInput): Promise<DeliveryProviderResult> {
-    const webhookUrl = resolveDiscordWebhookUrl(input);
+    if (input.targetType === "channel") {
+      if (input.resolvedSecret === null) {
+        return missingSecret();
+      }
 
-    if (webhookUrl === null) {
-      return invalidTarget("Discord delivery requires a webhook URL in the target or provider config");
+      const url = `https://discord.com/api/v10/channels/${input.externalTargetId}/messages`;
+      const response = await callProvider(() =>
+        postJsonWithTimeout(url, { content: input.content }, {
+          "Authorization": `Bot ${input.resolvedSecret}`,
+        }),
+      );
+
+      return response.ok ? toProviderResult(response.response, "discord") : response.result;
     }
 
-    const response = await callProvider(() =>
-      postJsonWithTimeout(webhookUrl, {
-        content: input.content,
-      }),
-    );
+    if (input.targetType === "webhook") {
+      const webhookUrl = resolveDiscordWebhookUrl(input);
 
-    return response.ok ? toProviderResult(response.response, "discord") : response.result;
+      if (webhookUrl === null) {
+        return invalidTarget("Discord delivery requires a webhook URL in the target or provider config");
+      }
+
+      const response = await callProvider(() =>
+        postJsonWithTimeout(webhookUrl, {
+          content: input.content,
+        }),
+      );
+
+      return response.ok ? toProviderResult(response.response, "discord") : response.result;
+    }
+
+    return invalidTarget("Discord delivery requires targetType webhook or channel");
   }
 }
 
@@ -59,7 +78,7 @@ function resolveDiscordWebhookUrl(input: DeliveryProviderInput): string | null {
   return configuredUrl ?? null;
 }
 
-async function postJsonWithTimeout(url: string, body: Record<string, unknown>): Promise<Response> {
+async function postJsonWithTimeout(url: string, body: Record<string, unknown>, extraHeaders?: Record<string, string>): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), defaultTimeoutMs);
 
@@ -68,6 +87,7 @@ async function postJsonWithTimeout(url: string, body: Record<string, unknown>): 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...extraHeaders,
       },
       body: JSON.stringify(body),
       signal: controller.signal,

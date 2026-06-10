@@ -14,6 +14,7 @@ export const openApiDocument = {
     { name: "Messages" },
     { name: "Rate Limit" },
     { name: "Admin" },
+    { name: "Webhooks" },
   ],
   paths: {
     "/health": {
@@ -256,6 +257,84 @@ export const openApiDocument = {
         },
       },
     },
+    "/notification-targets/connect-code": {
+      post: {
+        tags: ["Notification Targets"],
+        summary: "Request a connect code for linking a bot chat",
+        description: "Generates a single-use code to link your Telegram or Discord bot chat. Send the code to the bot to auto-create a notification target.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ConnectCodeRequest" } } },
+        },
+        responses: {
+          "201": { description: "Connect code generated", content: { "application/json": { schema: { $ref: "#/components/schemas/ConnectCodeResponse" } } } },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "400": { $ref: "#/components/responses/BadRequest" },
+        },
+      },
+    },
+    "/webhooks/telegram": {
+      post: {
+        tags: ["Webhooks"],
+        summary: "Telegram bot webhook receiver",
+        description: "Receives Telegram bot updates. Requires X-Telegram-Bot-Api-Secret-Token header for authentication.",
+        security: [],
+        parameters: [
+          { name: "X-Telegram-Bot-Api-Secret-Token", in: "header", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/TelegramUpdate" } } },
+        },
+        responses: {
+          "200": { description: "Update processed" },
+          "403": { description: "Invalid secret token" },
+          "400": { description: "Invalid payload" },
+        },
+      },
+    },
+    "/webhooks/discord": {
+      post: {
+        tags: ["Webhooks"],
+        summary: "Discord interactions webhook receiver",
+        description: "Receives Discord interaction events. Requires Ed25519 signature verification via X-Signature-Ed25519 and X-Signature-Timestamp headers.",
+        security: [],
+        parameters: [
+          { name: "X-Signature-Ed25519", in: "header", required: true, schema: { type: "string" } },
+          { name: "X-Signature-Timestamp", in: "header", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/DiscordInteraction" } } },
+        },
+        responses: {
+          "200": { description: "Interaction processed" },
+          "401": { description: "Invalid signature" },
+          "400": { description: "Invalid payload" },
+        },
+      },
+    },
+    "/providers/telegram/setup-webhook": {
+      post: {
+        tags: ["Providers"],
+        summary: "Register Telegram webhook URL",
+        description: "Admin only. Registers the webhook URL with Telegram's Bot API.",
+        security: [{ bearerAuth: [] }],
+        "x-admin-required": true,
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/TelegramSetupWebhookRequest" } } },
+        },
+        responses: {
+          "200": { description: "Webhook registered successfully" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "502": { description: "Telegram API returned an error" },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
@@ -477,6 +556,72 @@ export const openApiDocument = {
           sentToday: { type: "integer" },
           dailyLimit: { type: "integer" },
           remainingToday: { type: "integer" },
+        },
+      },
+      ConnectCodeRequest: {
+        type: "object",
+        required: ["provider"],
+        properties: {
+          provider: { $ref: "#/components/schemas/ProviderCode" },
+        },
+      },
+      ConnectCodeResponse: {
+        type: "object",
+        required: ["code", "expiresAt", "connectUrl"],
+        properties: {
+          code: { type: "string" },
+          expiresAt: { type: "string", format: "date-time" },
+          connectUrl: { type: "string" },
+        },
+      },
+      TelegramSetupWebhookRequest: {
+        type: "object",
+        required: ["url"],
+        properties: {
+          url: { type: "string", format: "uri" },
+        },
+      },
+      TelegramUpdate: {
+        type: "object",
+        properties: {
+          update_id: { type: "integer" },
+          message: {
+            type: "object",
+            properties: {
+              message_id: { type: "integer" },
+              text: { type: "string" },
+              chat: {
+                type: "object",
+                properties: {
+                  id: { type: "integer" },
+                },
+              },
+            },
+          },
+        },
+      },
+      DiscordInteraction: {
+        type: "object",
+        properties: {
+          type: { type: "integer" },
+          data: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              options: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    value: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          channel_id: { type: "string" },
+          token: { type: "string" },
         },
       },
     },

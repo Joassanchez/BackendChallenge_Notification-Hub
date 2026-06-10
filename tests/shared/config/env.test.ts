@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// Prevent side-effect dotenv/config from loading .env during these tests.
+// The vitest setup already loads .env.test, and dotenv/config would
+// override the explicitly set/cleared vars under test.
+vi.mock("dotenv/config", () => ({}));
+
 afterEach(() => {
   vi.resetModules();
 });

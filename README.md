@@ -25,6 +25,7 @@ src/
 │   ├── identity/          # Registro, login, JWT, roles
 │   ├── notifications/     # Mensajes + destinos de notificación
 │   ├── delivery/          # Adaptadores de proveedores, ejecución, reintentos
+│   ├── provider-webhooks/ # Webhooks de Telegram/Discord, connect-code
 │   ├── quota/             # Límite diario por usuario
 │   ├── administration/    # Reportes y métricas de admin
 │   └── shared/            # Config, cliente DB, manejo de errores
@@ -35,7 +36,7 @@ prisma/
 ├── schema.prisma          # Modelo de datos (10 tablas)
 ├── seed.ts                # Roles, usuario admin, proveedores
 └── migrations/
-tests/                     # 236 tests (unitarios + integración)
+tests/                     # 317 tests (34 archivos, unitarios + integración)
 ```
 
 ## Requisitos
@@ -97,7 +98,11 @@ Para integración con Telegram y Discord, completá tus credenciales reales:
 
 ```env
 TELEGRAM_BOT_TOKEN="tu_bot_token"
+TELEGRAM_WEBHOOK_SECRET="un_secreto_para_webhooks"
+TELEGRAM_BOT_USERNAME="tu_bot_username"
 DISCORD_WEBHOOK_URL="tu_webhook_url"
+DISCORD_PUBLIC_KEY="tu_public_key"
+DISCORD_BOT_TOKEN="tu_bot_token"
 ```
 
 ### 3. Iniciar PostgreSQL
@@ -126,7 +131,7 @@ El seed crea:
 npx tsx scripts/setup-provider-connections.ts
 ```
 
-Esto lee `TELEGRAM_BOT_TOKEN` y `DISCORD_WEBHOOK_URL` de tu `.env` y crea las filas correspondientes en `provider_connections`.
+Esto lee `TELEGRAM_BOT_TOKEN`, `DISCORD_WEBHOOK_URL` y `DISCORD_BOT_TOKEN` de tu `.env` y crea las filas correspondientes en `provider_connections`.
 
 ### 6. Iniciar la API
 
@@ -146,7 +151,11 @@ El servidor escucha en `http://localhost:3000`.
 | `PORT` | No | `3000` | Puerto del servidor HTTP |
 | `DAILY_MESSAGE_LIMIT` | No | `100` | Máximo de mensajes por usuario por día |
 | `TELEGRAM_BOT_TOKEN` | No | — | Token de la API de Telegram Bot |
+| `TELEGRAM_WEBHOOK_SECRET` | No | — | Secreto para validar webhooks entrantes de Telegram |
+| `TELEGRAM_BOT_USERNAME` | No | — | Username del bot de Telegram (para deep links) |
 | `DISCORD_WEBHOOK_URL` | No | — | URL del webhook de Discord |
+| `DISCORD_PUBLIC_KEY` | No | — | Clave pública de la aplicación de Discord (Ed25519) |
+| `DISCORD_BOT_TOKEN` | No | — | Token del bot de Discord (para comandos slash) |
 
 ## Ejecutar tests
 
@@ -181,6 +190,8 @@ La suite de tests usa una base de datos PostgreSQL separada (`notification_hub_t
 | `GET` | `/health` | Health check |
 | `POST` | `/auth/register` | Registrar un nuevo usuario |
 | `POST` | `/auth/login` | Iniciar sesión, devuelve JWT |
+| `POST` | `/webhooks/telegram` | Webhook entrante del bot de Telegram |
+| `POST` | `/webhooks/discord` | Webhook entrante de interacciones de Discord |
 
 ### Autenticados (requiere `Authorization: Bearer <token>`)
 
@@ -190,6 +201,7 @@ La suite de tests usa una base de datos PostgreSQL separada (`notification_hub_t
 | `GET` | `/providers` | Listar proveedores activos |
 | `GET` | `/notification-targets` | Listar tus destinos |
 | `POST` | `/notification-targets` | Crear un destino |
+| `POST` | `/notification-targets/connect-code` | Generar código de un solo uso para auto-conectar Telegram/Discord |
 | `PATCH` | `/notification-targets/:id` | Actualizar nombre/metadata del destino |
 | `PATCH` | `/notification-targets/:id/activate` | Activar un destino |
 | `PATCH` | `/notification-targets/:id/deactivate` | Desactivar un destino |
@@ -206,11 +218,13 @@ La suite de tests usa una base de datos PostgreSQL separada (`notification_hub_t
 | `GET` | `/admin/provider-connections` | Listar todas las conexiones de proveedores |
 | `GET` | `/admin/messages` | Listar todos los mensajes (filtros: `userId`, `status`, `provider`, `from`, `to`) |
 | `GET` | `/admin/metrics` | Métricas de uso por usuario |
+| `POST` | `/providers/telegram/setup-webhook` | Registrar URL del webhook de Telegram |
 
 ### Documentación de la API
 
 - **Swagger UI:** `http://localhost:3000/docs`
 - **OpenAPI JSON:** `http://localhost:3000/openapi.json`
+- **Coverage report:** `http://localhost:3000/coverage` (disponible después de correr los tests con coverage)
 
 ## Usar Swagger
 
@@ -235,22 +249,36 @@ curl -X POST http://localhost:3000/auth/login \
   -d '{"identifier":"demo","password":"Demo123!"}'
 ```
 
-### Paso 2 — Crear destinos de notificación
+### Paso 2 — Conectar Telegram y Discord (automático)
+
+En lugar de buscar IDs manualmente, usá el flujo automático con códigos de un solo uso:
 
 ```bash
 TOKEN="<tu-jwt>"
 
-# Destino Telegram (chat ID)
-curl -X POST http://localhost:3000/notification-targets \
+# Pedir código de conexión para Telegram
+curl -X POST http://localhost:3000/notification-targets/connect-code \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"provider":"telegram","externalTargetId":"123456789","targetType":"chat"}'
+  -d '{"provider":"telegram"}'
 
-# Destino Discord (webhook)
-curl -X POST http://localhost:3000/notification-targets \
+# Respuesta: {"code":"a1b2c3","connectUrl":"https://t.me/tu_bot?start=a1b2c3",...}
+# Abrí la URL en Telegram y enviá /start a1b2c3 al bot — el target se crea automáticamente.
+
+# Lo mismo para Discord:
+curl -X POST http://localhost:3000/notification-targets/connect-code \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"provider":"discord","externalTargetId":"https://discord.com/api/webhooks/...","targetType":"webhook"}'
+  -d '{"provider":"discord"}'
+
+# Usá /connect <código> en Discord — el target se crea automáticamente.
+```
+
+Verificá los targets creados:
+
+```bash
+curl http://localhost:3000/notification-targets \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Paso 3 — Enviar un mensaje
@@ -273,13 +301,14 @@ La respuesta incluye el estado del mensaje y los resultados por entrega. Si una 
 
 ## Funcionalidades clave
 
-- **Multi-proveedor:** Telegram (Bot API) y Discord (Webhooks) implementados. Slack y Teams están modelados en el schema para uso futuro.
+- **Multi-proveedor:** Telegram (Bot API) y Discord (Webhooks + Bot Token) implementados. Slack y Teams están modelados en el schema para uso futuro.
+- **Auto Target Discovery:** Conectá Telegram y Discord sin buscar IDs manualmente. Generá un código de un solo uso, envialo al bot, y el sistema crea el destino automáticamente.
 - **Idempotencia:** Pasá un header `Idempotency-Key` para reintentar requests de forma segura sin crear mensajes duplicados.
 - **Rate limiting atómico:** Cuota diaria por usuario aplicada con una sola sentencia SQL dentro de la transacción de creación de mensaje.
 - **Reintentos automáticos:** Las entregas fallidas se reintentan hasta 3 veces con backoff exponencial. Las entregas trabadas (processing > 60 s) se recuperan al iniciar.
 - **Redacción de secretos:** Los tokens de proveedores nunca se almacenan en la base de datos. Las respuestas se redactan antes de persistir.
 - **Reportes de admin:** Lista global de mensajes y métricas por usuario para operadores.
-- **Cobertura de tests completa:** 236 tests (unitarios + integración con PostgreSQL real).
+- **Cobertura de tests completa:** 317 tests (34 archivos, unitarios + integración con PostgreSQL real).
 
 ## Limitaciones conocidas
 
@@ -290,6 +319,7 @@ La respuesta incluye el estado del mensaje y los resultados por entrega. Si una 
 - **El health check** (`GET /health`) no verifica conectividad con la base de datos.
 - **Sin logging estructurado.** Usa `console.log` / `console.error`. Suficiente para desarrollo; se recomienda un logger como Pino o Winston para producción.
 - **El rate limiting es por usuario, no por IP.** Los endpoints de auth (`/auth/login`) no tienen protección contra fuerza bruta.
+- **Los connect codes son in-memory.** No persisten entre reinicios de la API. Los códigos generados se pierden si el proceso se reinicia. Para producción se recomienda migrar a una tabla en base de datos.
 
 ## Alternar entre Docker y desarrollo local
 

@@ -2,6 +2,8 @@ import type { Request, Response } from "express";
 import { Prisma, ProviderCode } from "../../../generated/prisma/client.js";
 import { unauthorized } from "../../../shared/http/errors.js";
 import { validateBody, validateParams } from "../../../shared/http/validation-wrapper.js";
+import type { ConnectCodeService } from "../../provider-webhooks/connect-code/connect-code.service.js";
+import { connectCodeBodySchema } from "../../provider-webhooks/connect-code/connect-code.schemas.js";
 import type { NotificationTargetService } from "./notification-target.service.js";
 import {
   createTargetBodySchema,
@@ -12,7 +14,10 @@ import {
 const badRequestMode = { mode: "bad-request" } as const;
 
 export class NotificationTargetController {
-  constructor(private readonly notificationTargetService: NotificationTargetService) {}
+  constructor(
+    private readonly notificationTargetService: NotificationTargetService,
+    private readonly connectCodeService?: ConnectCodeService,
+  ) {}
 
   readonly list = async (request: Request, response: Response): Promise<void> => {
     const auth = requireAuth(request);
@@ -73,6 +78,20 @@ export class NotificationTargetController {
     const target = await this.notificationTargetService.deactivate(auth.id, targetId);
 
     response.status(200).json(target);
+  };
+
+  readonly connectCode = async (request: Request, response: Response): Promise<void> => {
+    const auth = requireAuth(request);
+
+    if (!this.connectCodeService) {
+      response.status(501).json({ error: "Connect codes not available" });
+      return;
+    }
+
+    const body = validateBody(connectCodeBodySchema, request.body, badRequestMode);
+    const result = this.connectCodeService.generate(auth.id, body.provider);
+
+    response.status(201).json(result);
   };
 }
 

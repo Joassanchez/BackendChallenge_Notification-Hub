@@ -58,10 +58,6 @@ export class NotificationTargetService {
       throw badRequest("Provider has no active connection");
     }
 
-    if (connections.length > 1) {
-      throw badRequest("Provider has multiple active connections");
-    }
-
     const duplicate = await this.targets.findActiveDuplicate({
       userId: input.userId,
       providerId: provider.id,
@@ -73,11 +69,7 @@ export class NotificationTargetService {
       throw conflict("Notification target already exists");
     }
 
-    const activeConnection = connections[0];
-
-    if (activeConnection === undefined) {
-      throw badRequest("Provider has no active connection");
-    }
+    const activeConnection = await this.resolveConnection(provider.id, input.targetType);
 
     const target = await this.targets.create({
       userId: input.userId,
@@ -87,6 +79,65 @@ export class NotificationTargetService {
       targetType: input.targetType,
       ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
       ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+    });
+
+    return toNotificationTargetDto(target);
+  }
+
+  private async resolveConnection(providerId: string, targetType: string) {
+    const mapping: Record<string, string> = {
+      chat: "bot-token",
+      webhook: "webhook",
+      channel: "bot-token",
+    };
+
+    const expectedAuthType = mapping[targetType];
+    if (expectedAuthType === undefined) {
+      throw badRequest(`Unsupported target type: ${targetType}`);
+    }
+
+    const connections = await this.targets.findActiveConnectionsForProvider(providerId);
+
+    const matching = connections.find((c) => c.authType === expectedAuthType);
+    if (matching === undefined) {
+      throw badRequest("No matching connection for target type");
+    }
+
+    return matching;
+  }
+
+  async autoCreate(input: {
+    userId: string;
+    providerCode: string;
+    externalTargetId: string;
+    targetType: string;
+  }): Promise<NotificationTargetDto> {
+    const provider = await this.targets.findProviderByCode(input.providerCode as ProviderCodeType);
+
+    if (provider === null || !provider.isActive) {
+      throw badRequest("Provider is not available");
+    }
+
+    const duplicate = await this.targets.findActiveDuplicate({
+      userId: input.userId,
+      providerId: provider.id,
+      externalTargetId: input.externalTargetId,
+      targetType: input.targetType,
+    });
+
+    if (duplicate !== null) {
+      const fullDuplicate = await this.targets.findForUser(input.userId, duplicate.id);
+      if (fullDuplicate !== null) return toNotificationTargetDto(fullDuplicate);
+    }
+
+    const connection = await this.resolveConnection(provider.id, input.targetType);
+
+    const target = await this.targets.create({
+      userId: input.userId,
+      providerId: provider.id,
+      providerConnectionId: connection.id,
+      externalTargetId: input.externalTargetId,
+      targetType: input.targetType,
     });
 
     return toNotificationTargetDto(target);

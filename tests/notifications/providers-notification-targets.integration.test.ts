@@ -91,14 +91,14 @@ async function adminToken() {
   return login.body.accessToken as string;
 }
 
-async function createConnection(providerCode: ProviderCode, input?: { active?: boolean; secretRef?: string | null }) {
+async function createConnection(providerCode: ProviderCode, input?: { active?: boolean; secretRef?: string | null; authType?: string }) {
   const provider = await prisma.provider.findUniqueOrThrow({ where: { code: providerCode } });
 
   return prisma.providerConnection.create({
     data: {
       providerId: provider.id,
       name: `pnt_vitest_${providerCode}_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`,
-      authType: "test",
+      authType: input?.authType ?? "test",
       secretRef: input?.secretRef ?? null,
       config: { environment: "test" },
       isActive: input?.active ?? true,
@@ -191,7 +191,7 @@ describe("Providers and notification targets foundation", () => {
   it("creates targets with server-side connection resolution and lists only the owner scope", async () => {
     const owner = await createUserAndLogin();
     const foreign = await createUserAndLogin();
-    const connection = await createConnection(ProviderCode.telegram);
+    const connection = await createConnection(ProviderCode.telegram, { authType: "bot-token" });
     const foreignTarget = await createTarget({
       userId: foreign.user.id,
       providerCode: ProviderCode.telegram,
@@ -230,8 +230,8 @@ describe("Providers and notification targets foundation", () => {
 
   it("rejects invalid create payloads and duplicate active targets", async () => {
     const { token } = await createUserAndLogin();
-    await createConnection(ProviderCode.telegram);
-    await createConnection(ProviderCode.discord, { active: false });
+    await createConnection(ProviderCode.telegram, { authType: "bot-token" });
+    await createConnection(ProviderCode.discord, { active: false, authType: "webhook" });
 
     await request(app)
       .post("/notification-targets")
@@ -266,7 +266,7 @@ describe("Providers and notification targets foundation", () => {
 
   it("accepts discord channel targetType alongside webhook", async () => {
     const { token } = await createUserAndLogin();
-    await createConnection(ProviderCode.discord, { secretRef: "DISCORD_BOT_TOKEN" });
+    await createConnection(ProviderCode.discord, { secretRef: "DISCORD_BOT_TOKEN", authType: "bot-token" });
 
     const created = await request(app)
       .post("/notification-targets")
@@ -287,22 +287,78 @@ describe("Providers and notification targets foundation", () => {
     });
   });
 
-  it("rejects zero and multiple active connection resolution", async () => {
+  it("rejects zero active connections but resolves target type from multiple connections", async () => {
     const { token } = await createUserAndLogin();
 
+    // Zero connections — still rejected
     await request(app)
       .post("/notification-targets")
       .set("Authorization", `Bearer ${token}`)
       .send({ provider: "discord", externalTargetId: "no-connection", targetType: "webhook" })
       .expect(400);
 
-    await createConnection(ProviderCode.discord);
-    await createConnection(ProviderCode.discord);
+    // Two Discord connections with different authTypes — should resolve correctly
+    await createConnection(ProviderCode.discord, { authType: "webhook" });
+    await createConnection(ProviderCode.discord, { authType: "bot-token" });
+
+    const created = await request(app)
+      .post("/notification-targets")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ provider: "discord", externalTargetId: "resolved-webhook", targetType: "webhook" })
+      .expect(201);
+
+    expect(created.body).toMatchObject({
+      provider: "discord",
+      externalTargetId: "resolved-webhook",
+      targetType: "webhook",
+    });
+  });
+
+  it("resolves webhook target to webhook connection when both webhook and bot-token exist", async () => {
+    const { token } = await createUserAndLogin();
+    await createConnection(ProviderCode.discord, { authType: "webhook" });
+    await createConnection(ProviderCode.discord, { authType: "bot-token" });
+
+    const created = await request(app)
+      .post("/notification-targets")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ provider: "discord", externalTargetId: "discord-webhook-target", targetType: "webhook" })
+      .expect(201);
+
+    expect(created.body).toMatchObject({
+      provider: "discord",
+      externalTargetId: "discord-webhook-target",
+      targetType: "webhook",
+    });
+  });
+
+  it("resolves channel target to bot-token connection when both webhook and bot-token exist", async () => {
+    const { token } = await createUserAndLogin();
+    await createConnection(ProviderCode.discord, { authType: "webhook" });
+    await createConnection(ProviderCode.discord, { authType: "bot-token" });
+
+    const created = await request(app)
+      .post("/notification-targets")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ provider: "discord", externalTargetId: "discord-channel-target", targetType: "channel" })
+      .expect(201);
+
+    expect(created.body).toMatchObject({
+      provider: "discord",
+      externalTargetId: "discord-channel-target",
+      targetType: "channel",
+    });
+  });
+
+  it("rejects target creation when no connection matches the target type", async () => {
+    const { token } = await createUserAndLogin();
+    // Only webhook connection exists, no bot-token
+    await createConnection(ProviderCode.discord, { authType: "webhook" });
 
     await request(app)
       .post("/notification-targets")
       .set("Authorization", `Bearer ${token}`)
-      .send({ provider: "discord", externalTargetId: "ambiguous", targetType: "webhook" })
+      .send({ provider: "discord", externalTargetId: "no-bot-token", targetType: "channel" })
       .expect(400);
   });
 

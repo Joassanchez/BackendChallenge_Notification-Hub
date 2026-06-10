@@ -96,7 +96,7 @@ function createProviderServices(input: { connections?: ProviderConnectionWithPro
 
 function createTargetService(input: {
   provider?: ReturnType<typeof buildProvider> | null;
-  activeConnections?: Array<{ id: string }>;
+  activeConnections?: Array<{ id: string; authType?: string }>;
   duplicate?: NotificationTargetWithProvider | null;
   existing?: NotificationTargetWithProvider | null;
   createdTarget?: NotificationTargetWithProvider;
@@ -107,7 +107,7 @@ function createTargetService(input: {
   const targets = {
     listForUser: vi.fn(async () => [buildTarget()]),
     findProviderByCode: vi.fn(async () => ("provider" in input ? input.provider : buildProvider())),
-    findActiveConnectionsForProvider: vi.fn(async () => input.activeConnections ?? [{ id: connectionId }]),
+    findActiveConnectionsForProvider: vi.fn(async () => input.activeConnections ?? [{ id: connectionId, authType: "bot-token" }]),
     findActiveDuplicate: vi.fn(async () => input.duplicate ?? null),
     create: vi.fn(async () => createdTarget),
     findForUser: vi.fn(async () => ("existing" in input ? input.existing : buildTarget())),
@@ -155,7 +155,7 @@ describe("Provider and ProviderConnection services", () => {
 });
 
 describe("NotificationTargetService", () => {
-  it("rejects inactive, missing, or ambiguous provider connection resolution", async () => {
+  it("rejects inactive, missing, or mismatched provider connection resolution", async () => {
     const inactiveProvider = createTargetService({ provider: buildProvider({ active: false }) });
     await expectAppError(
       () =>
@@ -180,16 +180,16 @@ describe("NotificationTargetService", () => {
       { statusCode: 400, code: "BAD_REQUEST", message: "Provider has no active connection" },
     );
 
-    const ambiguousConnection = createTargetService({ activeConnections: [{ id: connectionId }, { id: discordConnectionId }] });
+    const mismatchedConnection = createTargetService({ activeConnections: [{ id: connectionId, authType: "webhook" }] });
     await expectAppError(
       () =>
-        ambiguousConnection.service.create({
+        mismatchedConnection.service.create({
           userId,
           provider: ProviderCode.telegram,
           externalTargetId: "chat-1",
           targetType: "chat",
         }),
-      { statusCode: 400, code: "BAD_REQUEST", message: "Provider has multiple active connections" },
+      { statusCode: 400, code: "BAD_REQUEST", message: "No matching connection for target type" },
     );
   });
 

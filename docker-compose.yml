@@ -31,9 +31,15 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
       DAILY_MESSAGE_LIMIT: ${DAILY_MESSAGE_LIMIT:-100}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      DISCORD_PUBLIC_KEY: ${DISCORD_PUBLIC_KEY:-}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
     ports:
       - "3000:3000"
+    volumes:
+      - ./coverage:/app/coverage:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
       interval: 30s
@@ -54,7 +60,11 @@ services:
       JWT_EXPIRES_IN: 1d
       DAILY_MESSAGE_LIMIT: "100"
       TELEGRAM_BOT_TOKEN: ""
+      TELEGRAM_WEBHOOK_SECRET: ""
+      TELEGRAM_BOT_USERNAME: ""
       DISCORD_WEBHOOK_URL: ""
+      DISCORD_PUBLIC_KEY: ""
+      DISCORD_BOT_TOKEN: ""
     volumes:
       - .:/app
       - notification_hub_node_modules:/app/node_modules

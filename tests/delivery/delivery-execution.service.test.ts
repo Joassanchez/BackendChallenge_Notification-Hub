@@ -13,6 +13,7 @@ import type {
   DeliveryProviderRegistry,
   DeliveryProviderResult,
 } from "../../src/modules/delivery/adapters/delivery-provider-adapter.js";
+import { createProductionDeliveryProviderRegistry } from "../../src/modules/delivery/adapters/provider-adapters.js";
 import { messageId, telegramTargetId } from "../helpers/service-fixtures.js";
 
 const deliveryId = "66666666-6666-4666-8666-666666666666";
@@ -375,5 +376,136 @@ describe("DeliveryExecutionService", () => {
         }),
       }),
     ]);
+  });
+
+  describe("Discord adapter channel targetType", () => {
+    it("sends to Bot API URL with Authorization header for channel targetType", async () => {
+      const fetchMock = vi.fn(async () =>
+        new Response(JSON.stringify({ id: "msg-1" }), { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const registry = createProductionDeliveryProviderRegistry();
+      const discordAdapter = registry.discord!;
+      const result = await discordAdapter.send({
+        messageId,
+        deliveryId,
+        providerCode: ProviderCode.discord,
+        content: "Hello Discord",
+        targetType: "channel",
+        externalTargetId: "123456789",
+        targetMetadata: null,
+        connectionId,
+        connectionConfig: null,
+        resolvedSecret: "test-bot-token",
+      });
+
+      expect(result.kind).toBe("success");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const firstCall = (fetchMock as any).mock.calls[0] as [string, RequestInit];
+      expect(firstCall[0]).toBe("https://discord.com/api/v10/channels/123456789/messages");
+      expect((firstCall[1] as any)?.headers).toEqual(
+        expect.objectContaining({
+          "Authorization": "Bot test-bot-token",
+        }),
+      );
+
+      vi.unstubAllGlobals();
+    });
+
+    it("returns MISSING_SECRET for channel targetType when no bot token", async () => {
+      const fetchMock = vi.fn(async () =>
+        new Response(JSON.stringify({ id: "msg-1" }), { status: 200 }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const registry = createProductionDeliveryProviderRegistry();
+      const discordAdapter = registry.discord!;
+      const result = await discordAdapter.send({
+        messageId,
+        deliveryId,
+        providerCode: ProviderCode.discord,
+        content: "Hello Discord",
+        targetType: "channel",
+        externalTargetId: "123456789",
+        targetMetadata: null,
+        connectionId,
+        connectionConfig: null,
+        resolvedSecret: null,
+      });
+
+      expect(result).toEqual({
+        kind: "failed",
+        errorCode: "MISSING_SECRET",
+        errorMessage: "Provider secret is not configured",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      vi.unstubAllGlobals();
+    });
+
+    it("webhook targetType still functions unchanged (regression)", async () => {
+      const fetchMock = vi.fn(async () =>
+        new Response(JSON.stringify({ id: "msg-2" }), { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const registry = createProductionDeliveryProviderRegistry();
+      const discordAdapter = registry.discord!;
+      const result = await discordAdapter.send({
+        messageId,
+        deliveryId,
+        providerCode: ProviderCode.discord,
+        content: "Hello Webhook",
+        targetType: "webhook",
+        externalTargetId: "https://discord.com/api/webhooks/123/abc",
+        targetMetadata: null,
+        connectionId,
+        connectionConfig: null,
+        resolvedSecret: null,
+      });
+
+      expect(result.kind).toBe("success");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const firstCall = (fetchMock as any).mock.calls[0] as [string, RequestInit];
+      expect(firstCall[0]).toBe("https://discord.com/api/webhooks/123/abc");
+      // Webhook should NOT have Authorization header
+      expect((firstCall[1] as any)?.headers).not.toHaveProperty("Authorization");
+      // Webhook should still have Content-Type
+      expect((firstCall[1] as any)?.headers?.["Content-Type"]).toBe("application/json");
+
+      vi.unstubAllGlobals();
+    });
+
+    it("returns INVALID_TARGET for unknown targetType", async () => {
+      const fetchMock = vi.fn(async () => new Response("ok", { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const registry = createProductionDeliveryProviderRegistry();
+      const discordAdapter = registry.discord!;
+      const result = await discordAdapter.send({
+        messageId,
+        deliveryId,
+        providerCode: ProviderCode.discord,
+        content: "test",
+        targetType: "unknown-type",
+        externalTargetId: "nope",
+        targetMetadata: null,
+        connectionId,
+        connectionConfig: null,
+        resolvedSecret: "token",
+      });
+
+      expect(result).toEqual({
+        kind: "failed",
+        errorCode: "INVALID_TARGET",
+        errorMessage: "Discord delivery requires targetType webhook or channel",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      vi.unstubAllGlobals();
+    });
   });
 });
