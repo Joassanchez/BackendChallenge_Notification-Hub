@@ -32,4 +32,8 @@ export const env = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN?.trim() || "1d",
   PORT: optionalNumber("PORT", 3000),
   DAILY_MESSAGE_LIMIT: optionalNumber("DAILY_MESSAGE_LIMIT", 100),
+  TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET ?? "",
+  TELEGRAM_BOT_USERNAME: process.env.TELEGRAM_BOT_USERNAME ?? "",
+  DISCORD_PUBLIC_KEY: process.env.DISCORD_PUBLIC_KEY ?? "",
+  DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN ?? "",
 } as const;
