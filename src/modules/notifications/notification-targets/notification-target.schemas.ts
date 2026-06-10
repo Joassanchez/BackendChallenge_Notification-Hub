@@ -19,7 +19,7 @@ function validateProviderTargetType(provider: string, targetType: string): boole
     return false;
   }
 
-  return allowedTargetTypes[provider].includes(targetType);
+  return (allowedTargetTypes[provider] ?? []).includes(targetType);
 }
 
 const updateAllowedKeys = ["displayName", "metadata"];

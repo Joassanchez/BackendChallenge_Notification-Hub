@@ -58,6 +58,24 @@ async function main() {
       console.log("Created Discord provider connection");
     }
 
+    const existingDiscordBot = await prisma.providerConnection.findFirst({
+      where: { providerId: discord.id, name: "local_discord_bot" },
+    });
+
+    if (!existingDiscordBot) {
+      await prisma.providerConnection.create({
+        data: {
+          providerId: discord.id,
+          name: "local_discord_bot",
+          authType: "bot-token",
+          secretRef: "DISCORD_BOT_TOKEN",
+          config: Prisma.JsonNull,
+          isActive: true,
+        },
+      });
+      console.log("Created Discord bot-token provider connection");
+    }
+
     const connections = await prisma.providerConnection.findMany({
       where: {
         providerId: {
